@@ -1,0 +1,27 @@
+This document will contain the information to the video quiz expandable box that is in the learn.tsx file.
+
+There are 3 major aspects of this that we want to edit.
+
+First of all lets discuss some context about the video quiz expandable box. In side it we have 3 screens that the user swipes left to get to. We have
+ContextView, ConversationalView, CulturalView that are contained in the box. Now each screen that you swipe left to, the top of the expandable box, 
+'the title / header ' still says video quiz. we want to change this. We want it to to says 'video quiz' like it does right now when its on the 
+ContextView, 'Cultural Info' when its on the culturalview which is the second screen, then 'Speaking Practice' when its on the 3rd slide.
+
+Now what we also want to do is add a 4th screen in the swipeable box, now we can create this 4th screen and put it in the app/views directory, now
+what this screen will be for is it will act as a completion screen for a video, so on it the header will say 'Good Job!' and now this screen on it will
+say you completed the video and got 100xp , which we will then also have a display of the users xp bar and level, we will also have a display of their
+daily goal for videos. You will need to refer to the progress.tsx file to see how we interface with the database for using the users xp and daily goal
+information so you can apply that here. now also what we want to do is add a text below this that says 'Swipe up to continue' then with an arrow 
+poiting up. Now we want to remember that all of this needs to fit on the screen space that it in alloted in this expandable box. Use your UI design
+skill to make it look great.
+
+The next feature: Right now in learn.tsx we are updating the users xp and daily goal information when they get the correct answer in the contextview
+question, (as the context view is a multiple choice question), what we want to do is change this logic to place it on our new 4th screen, so when
+the user swipes through the swipeable box and gets to the 4th screen, we instantly trigger that logic to update the xp and the daily goal, just like 
+how it is right now just moving it to this area in the code.
+
+Next feature: Right now at the bottom of these screens in the expandable box, we have " <-- swipe " at the bottom of each screen, what we want to do 
+is replace this a fillable dot indicator, now you can use your imagination to interpret what this should look like, but we should have 4 dots at the
+bottom of each page, where on the first screen, the first dot is filled with color, then on the second screen the 2nd dot is filled, going onto the
+4th screen where then that dot will be the one that is filled. now the fill color of the dots will be #5a51e1, and we also want to make sure that
+we pay attention to UI detail to not make these big so that everything can fit nicley on the screen. 

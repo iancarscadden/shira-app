@@ -1,0 +1,6 @@
+Vertical top down list of components:
+Top middle centered title in white "Your Journey" white bold text
+The top elenent will be the current steak of the user using the fire svg.
+Under that there is a box spanning the horzontal of the screen saying Weekly goal with a fill bar and X of our X completed with dummy data and a dummy fill on the bar relating to the fill of the data
+Next part of the screen will be two boxes side by side, one is "mastered Phrases", the one on the right is "need to work on"
+The next component down will fill the rest of the screen and it will be a big caeldar with the days your were active filled out

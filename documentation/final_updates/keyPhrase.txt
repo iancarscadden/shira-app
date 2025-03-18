@@ -1,0 +1,12 @@
+Update current feature in learn.tsx:
+
+What we want to do is look at the keyphrase logic that we currently have for highlighting the "highlightPhrase"
+that we read in form the data for the video, and our logic for where we take it and then when that exact phrase
+comes up in the captions we highlight it and perform the loop logic that we curretnly have in place.
+
+Here is what is happening right now: for some of the videos there is just no highlited phrase on the screen
+as our current phrase highlighting logic must be not good (or maybe we need to strip it of periods in the highl
+ighted phrase). We need to look at our logic for the hightlighting phrase and perform some analysis of why for
+for videos it could not be hightlighting, and then propose some fixes / solutions to this logic in our code.
+
+

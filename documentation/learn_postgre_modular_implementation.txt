@@ -1,0 +1,321 @@
+1. Fetch and Lazy-Load Lesson Data in Learn.tsx
+Query the Database:
+When the Learn screen loads, query your content table using the target language from the user’s profile (for example, "spanish"). Store the result (the JSONB structure) in state.
+
+Implement Lazy Loading:
+Use two state variables—one for the current lesson and one for the next lesson. On scroll (The user will scroll up on the screen to go to the next lesson), update the current lesson with the preloaded next lesson, and prefetch the subsequent lesson. This ensures that when the user moves to the next piece of content, the data is already loaded.
+
+Example (Pseudo-code):
+
+tsx
+Copy
+// Inside Learn.tsx
+const [currentLesson, setCurrentLesson] = useState(null);
+const [nextLesson, setNextLesson] = useState(null);
+const [lessonIndex, setLessonIndex] = useState(0);
+const userTargetLang = 'spanish'; // Retrieved from user profile
+
+const fetchLesson = async (index) => {
+  const { data, error } = await supabase
+    .from('content')
+    .select('*')
+    .eq('language', userTargetLang)
+    .order('created_at', { ascending: true })
+    .range(index, index);
+  if (error) {
+    console.error(error);
+    return null;
+  }
+  return data ? data[0] : null;
+};
+
+useEffect(() => {
+  async function loadLessons() {
+    const firstLesson = await fetchLesson(lessonIndex);
+    const secondLesson = await fetchLesson(lessonIndex + 1);
+    setCurrentLesson(firstLesson);
+    setNextLesson(secondLesson);
+  }
+  loadLessons();
+}, []);
+
+const handleScrollToNext = async () => {
+  setCurrentLesson(nextLesson);
+  setLessonIndex((prev) => prev + 1);
+  // Prefetch the lesson after next
+  const upcomingLesson = await fetchLesson(lessonIndex + 2);
+  setNextLesson(upcomingLesson);
+};
+2. Pass Data as Props to Child Components
+Once your lesson data is loaded (i.e. your JSONB object is in currentLesson), extract the relevant sections and pass them down as props:
+
+ContextView:
+It will receive the key phrase, its translation, and the multiple-choice options.
+
+CulturalView:
+It will get the cultural title and an array of boxes (each with a label and blurb).
+
+ConversationalView:
+It will receive the response prompt (and its translation) as well as the speaking phrase (and its translation).
+
+Example in Learn.tsx Render:
+
+jsx
+Copy
+// In the render method of Learn.tsx
+{currentLesson && (
+  <ScrollView horizontal pagingEnabled contentContainerStyle={{ width: lessonsWidth * 3 }}>
+    <View style={{ width: lessonsWidth }}>
+      <ContextView
+        keyPhrase={currentLesson.context.keyPhrase}
+        keyPhraseTranslation={currentLesson.context.keyPhraseTranslation}
+        choices={currentLesson.context.choices}
+      />
+    </View>
+    <View style={{ width: lessonsWidth }}>
+      <CulturalView
+        title={currentLesson.cultural.title}
+        boxes={currentLesson.cultural.boxes}
+      />
+    </View>
+    <View style={{ width: lessonsWidth }}>
+      <ConversationalView
+        responsePrompt={currentLesson.conversational.responsePrompt}
+        responsePromptTranslation={currentLesson.conversational.responsePromptTranslation}
+        speakingPhrase={currentLesson.conversational.speakingPhrase}
+        speakingPhraseTranslation={currentLesson.conversational.speakingPhraseTranslation}
+      />
+    </View>
+  </ScrollView>
+)}
+3. Refactor the Child Components to Accept Props
+Each of your subcomponents (ContextView, CulturalView, and ConversationalView) will be modified from using hardcoded data to receiving data via props. For example:
+
+ContextView.tsx:
+
+jsx
+Copy
+// ContextView.tsx
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+
+const ContextView = ({ keyPhrase, keyPhraseTranslation, choices }) => {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.keyPhraseLabel}>{keyPhrase}</Text>
+      <Text style={styles.keyPhraseTranslation}>{keyPhraseTranslation}</Text>
+      {choices.map((choice, i) => (
+        <TouchableOpacity key={i} style={styles.choiceButton}>
+          <Text style={styles.choiceText}>{choice.text}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+export default ContextView;
+
+const styles = StyleSheet.create({
+  // styles here...
+});
+CulturalView.tsx:
+
+jsx
+Copy
+// CulturalView.tsx
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+
+const CulturalView = ({ title, boxes }) => {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.title}>{title}</Text>
+      {boxes.map((box, i) => (
+        <TouchableOpacity key={i} style={styles.box}>
+          <Text style={styles.label}>{box.label}</Text>
+          <Text style={styles.blurb}>{box.blurb}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+export default CulturalView;
+
+const styles = StyleSheet.create({
+  // styles here...
+});
+ConversationalView.tsx:
+
+jsx
+Copy
+// ConversationalView.tsx
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+
+const ConversationalView = ({
+  responsePrompt,
+  responsePromptTranslation,
+  speakingPhrase,
+  speakingPhraseTranslation
+}) => {
+  return (
+    <View style={styles.container}>
+      <Text style={styles.prompt}>{responsePrompt}</Text>
+      <Text style={styles.promptTranslation}>{responsePromptTranslation}</Text>
+      <Text style={styles.speakingPhrase}>{speakingPhrase}</Text>
+      <Text style={styles.speakingPhraseTranslation}>{speakingPhraseTranslation}</Text>
+    </View>
+  );
+};
+
+export default ConversationalView;
+
+const styles = StyleSheet.create({
+  // styles here...
+});
+4. Putting It All Together
+Learn.tsx becomes the central hub:
+
+It fetches data from the database.
+It stores the current and next lessons.
+It passes the relevant data to each subcomponent as props.
+It manages the lazy loading behavior when the user scrolls to the next lesson.
+Each Subcomponent (ContextView, CulturalView, ConversationalView) becomes a modular, data-driven template that renders based on the props it receives.
+
+
+
+
+we also want to write all of the code for the supabase logic inside of the supabase folder, and we want to write it in typescript. If there is pre exisiting code we will rewrite to to be in typescript.
+
+Here is an example of what the jsonb will look like in the content table for a certain video:
+
+{
+  "video": {
+    "id": "RQLfUgbQxIs",
+    "length": 19,
+    "clipStart": 200,
+    "clipEnd": 219,
+    "highlightPhrase": "nos metemos a nadar",
+    "captions": [
+      {
+        "targetLangLine": "Fuentes conmemorativas.",
+        "nativeLangLine": "Commemorative fountains.",
+        "localStart": 0.05,
+        "localEnd": 1.2
+      },
+      {
+        "targetLangLine": "Vaya dato nada perturbador y agradable.",
+        "nativeLangLine": "A quite unperturbing and pleasant fact.",
+        "localStart": 1.2,
+        "localEnd": 8.21
+      },
+      {
+        "targetLangLine": "Oye, ese Sí.",
+        "nativeLangLine": "Oh, that yes.",
+        "localStart": 8.23,
+        "localEnd": 9.24
+      },
+      {
+        "targetLangLine": "¿Y si nos metemos a nadar? Que procede.",
+        "nativeLangLine": "What if we jump in to swim? What's next?",
+        "localStart": 9.24,
+        "localEnd": 12.06
+      },
+      {
+        "targetLangLine": "¿Qué pasa?",
+        "nativeLangLine": "What's happening?",
+        "localStart": 12.06,
+        "localEnd": 12.24
+      },
+      {
+        "targetLangLine": "Sacan al toque en la cárcel peruana.",
+        "nativeLangLine": "They quickly bust you in the Peruvian prison.",
+        "localStart": 12.24,
+        "localEnd": 15.26
+      },
+      {
+        "targetLangLine": "Evitemos la cárcel peruana. A ver.",
+        "nativeLangLine": "Let's avoid Peruvian jail. Let's see.",
+        "localStart": 15.28,
+        "localEnd": 17.08
+      },
+      {
+        "targetLangLine": "No queremos que un pollo",
+        "nativeLangLine": "We don't want a chicken",
+        "localStart": 17.08,
+        "localEnd": 18.12
+      },
+      {
+        "targetLangLine": "en la noche nos rasque.",
+        "nativeLangLine": "to scratch us at night.",
+        "localStart": 18.12,
+        "localEnd": 19.1
+      }
+    ]
+  },
+  "context": {
+    "keyPhrase": "¿Y si nos metemos a nadar?",
+    "keyPhraseTranslation": "What if we get in to swim?",
+    "choices": [
+      {
+        "text": "A group of friends near a public fountain at night",
+        "isCorrect": true
+      },
+      {
+        "text": "During a business meeting with clients",
+        "isCorrect": false
+      },
+      {
+        "text": "At a formal dinner party",
+        "isCorrect": false
+      }
+    ]
+  },
+  "cultural": {
+    "title": "What happens if you jump into a public fountain in Peru?",
+    "boxes": [
+      {
+        "label": "Reactions",
+        "blurb": "Some locals might think it's funny, but security won't let you get away with it."
+      },
+      {
+        "label": "Consequences",
+        "blurb": "You could be fined or even detained—hence the term 'Cárcel peruana!'"
+      },
+      {
+        "label": "Cultural Insight",
+        "blurb": "Humor is often exaggerated in Spanish contexts, reflecting local attitudes."
+      }
+    ]
+  },
+  "conversational": {
+    "responsePrompt": "¿Y si nos metemos a nadar?",
+    "responsePromptTranslation": "What if we get in to swim?",
+    "speakingPhrase": "nos metemos a nadar",
+    "speakingPhraseTranslation": "we get in to swim"
+  }
+}
+
+here a sql description of the content table:
+
+Content Table Schema:
+
+id: Auto-incrementing primary key (SERIAL)
+language: A text field for the lesson's language (e.g., "Spanish")
+data: A JSONB column that holds the entire lesson content (including video details, context, cultural insights, and conversational data)
+created_at: A timestamp column with a default value of the current time
+
+also here is a descroption of the profiles table:
+
+| column_name  | data_type                | character_maximum_length | is_nullable |
+| ------------ | ------------------------ | ------------------------ | ----------- |
+| id           | uuid                     | null                     | NO          |
+| display_name | text                     | null                     | YES         |
+| avatar_url   | text                     | null                     | YES         |
+| target_lang  | text                     | null                     | YES         |
+| created_at   | timestamp with time zone | null                     | NO          |
+| updated_at   | timestamp with time zone | null                     | NO          |
+| current_lesson_id | int4 | null |null
+
+the value for the target_lang will also be in this case "Spanish" first letter capital and the rest lower case.

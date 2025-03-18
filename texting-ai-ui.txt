@@ -1,0 +1,145 @@
+ConversationalView Component Documentation
+========================================
+
+Overview
+--------
+ConversationalView is a React Native component that provides a chat-like interface for language learning interactions. It handles audio recording, speech processing, and displays a conversation between the user and AI system.
+
+Key Features
+-----------
+1. Message Display
+   - Scrollable chat interface
+   - Different bubble styles for user (blue) and system (translucent white)
+   - Automatic scrolling to latest messages
+   - Support for message translations (Spanish/English)
+
+2. Typing Indicators
+   - Animated dots for both user and AI typing states
+   - Custom TypingIndicator component with fade animations
+   - Proper bubble styling matching message bubbles
+
+3. Recording Interface
+   - Microphone button with animation feedback
+   - Recording state indication (red when recording)
+   - Clear button for resetting conversation
+   - Translation toggle button
+
+State Management
+---------------
+- messages: Array of conversation messages
+- isRecording: Boolean for mic state
+- isTypingUser/isTypingAI: Boolean for typing indicators
+- isTranslated: Boolean for language toggle
+- showMicInstructions: Boolean for first-time user guidance
+
+Animation Implementation
+----------------------
+1. Typing Indicator
+   - Uses Animated.Value for opacity
+   - Loop animation sequence (500ms fade in/out)
+   - Smooth cleanup on unmount
+
+2. Microphone Button
+   - Scale animation on press
+   - Sequence: 0.8 scale (100ms) -> 1.0 scale (100ms)
+
+Auto-Scrolling Logic
+-------------------
+- Implemented via scrollToBottom function
+- 100ms delay for smooth animation
+- Triggers on:
+  * User typing starts
+  * User message appears
+  * AI typing starts
+  * AI message appears
+  * Clear conversation (scrolls to top)
+
+Audio Recording Configuration
+---------------------------
+Android:
+- outputFormat: 2 (ENCODING_PCM_16BIT)
+- audioEncoder: 3 (AMR_WB)
+- sampleRate: 16000
+- numberOfChannels: 1
+- bitRate: 256000
+
+iOS:
+- audioQuality: 0.7 (high quality)
+- outputFormat: 'lpcm'
+- sampleRate: 16000
+- numberOfChannels: 1
+- bitRate: 256000
+
+Web:
+- mimeType: 'audio/webm'
+- bitsPerSecond: 256000
+
+Styling Details
+--------------
+Message Bubbles:
+- maxWidth: 80% of container
+- borderRadius: 16
+- padding: 12px
+- paddingBottom: 8px (reduced for text)
+- lineHeight: 20 for better text spacing
+
+User Messages:
+- backgroundColor: #5A51E1
+- alignSelf: 'flex-end'
+
+System Messages:
+- backgroundColor: rgba(255,255,255,0.1)
+- alignSelf: 'flex-start'
+
+Control Buttons:
+- Clear: Translucent white, rounded rectangle
+- Mic: 70x70 circle, purple/red states
+- Translate: 32x32 square, slightly rounded
+
+Important Workflows
+-----------------
+1. Recording Process:
+   - User taps mic → startRecording
+   - Second tap → stopRecording
+   - Process audio → show user typing
+   - Display user message
+   - Show AI typing
+   - Display AI response
+
+2. Message Processing:
+   - Audio → Base64 encoding
+   - Send to cloud function
+   - Process response
+   - Format and display messages
+   - Handle errors gracefully
+
+3. Translation Toggle:
+   - Affects initial message
+   - Affects instruction text
+   - Maintains conversation history
+
+Error Handling
+-------------
+- Audio permission checks
+- Recording start/stop error catches
+- Network request error handling
+- Invalid response structure checks
+- User feedback via Alert component
+
+Performance Considerations
+------------------------
+- Delayed scrolling for smooth animations
+- Cleanup of animations on unmount
+- Proper typing indicator cleanup
+- Efficient message rendering
+- Optimized audio recording settings
+
+Future Improvements
+-----------------
+- Message persistence
+- More language options
+- Voice playback
+- Message reactions
+- Error retry mechanism
+- Loading states
+- Network status handling

@@ -1,0 +1,14 @@
+We are going a full from onboarding to into the app flow where we will create a new account, i will be reporting the process noting the errors and concerning console logs, where when you are done reading this you will go though and fix all of the erorrs.
+
+On npm start, first thing i see is this:  (NOBRIDGE) WARN  Route "./learn-components/types.ts" is missing the required default export. Ensure a React component is exported as default. [Component Stack]
+
+Alright now on account creation we can see that we are getting errors in the console:  (NOBRIDGE) LOG  RootLayout: Auth state changed: SIGNED_IN {"access_token": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImxsVkttckI2N0t4a01KYTMiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL2ZyaXdobWpocHRqdWNxd2RzcWVpLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiIxY2I3YmI5Yi0zZjQzLTRkN2QtOTZhMS0yNDcyZDBjNjUwYjUiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzQxMjM2MTMzLCJpYXQiOjE3NDEyMzI1MzMsImVtYWlsIjoiaWFuY2Fyc2NhZGRlbnRlc3QxQGdtYWlsLmNvbSIsInBob25lIjoiIiwiYXBwX21ldGFkYXRhIjp7InByb3ZpZGVyIjoiZW1haWwiLCJwcm92aWRlcnMiOlsiZW1haWwiXX0sInVzZXJfbWV0YWRhdGEiOnsiZW1haWwiOiJpYW5jYXJzY2FkZGVudGVzdDFAZ21haWwuY29tIiwiZW1haWxfdmVyaWZpZWQiOnRydWUsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwic3ViIjoiMWNiN2JiOWItM2Y0My00ZDdkLTk2YTEtMjQ3MmQwYzY1MGI1In0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3NDEyMzI1MzN9XSwic2Vzc2lvbl9pZCI6IjBiZTA4MzhlLTI5YmQtNDkwNi05Mjk5LTE1MGZhNTA1MjA0OSIsImlzX2Fub255bW91cyI6ZmFsc2V9.pS0Ze8F_QQ9hgXzUoXwayqq8I7oLQ_671iEJQwCHe7I", "expires_at": 1741236133, "expires_in": 3600, "refresh_token": "nlppc_nPTn9io3poBqHLUA", "token_type": "bearer", "user": {"app_metadata": {"provider": "email", "providers": [Array]}, "aud": "authenticated", "created_at": "2025-03-06T03:42:13.394728Z", "email": "iancarscaddentest1@gmail.com", "email_confirmed_at": "2025-03-06T03:42:13.413135702Z", "id": "1cb7bb9b-3f43-4d7d-96a1-2472d0c650b5", "identities": [[Object]], "is_anonymous": false, "last_sign_in_at": "2025-03-06T03:42:13.422781598Z", "phone": "", "role": "authenticated", "updated_at": "2025-03-06T03:42:13.425296Z", "user_metadata": {"email": "iancarscaddentest1@gmail.com", "email_verified": true, "phone_verified": false, "sub": "1cb7bb9b-3f43-4d7d-96a1-2472d0c650b5"}}}
+ (NOBRIDGE) LOG  RootLayout: Updating user streak after auth change...
+ (NOBRIDGE) ERROR  Error fetching user streak data: {"code": "PGRST116", "details": "The result contains 0 rows", "hint": null, "message": "JSON object requested, multiple (or no) rows returned"} 
+
+ I think this is just an error that needs to be handled as since the account is just created there would be now row already?? 
+
+ we also need to take away the system alert that goes to the users phone when they create their account that says "account created successfully"
+
+Now the paywall screen in onboarding is coming up correctly just how we like it after the step6, and the button to "continue with 3 videos" is also working great!
+

@@ -1,0 +1,16 @@
+New feature: -2 and +2 buttons in learn.tsx.
+
+In learn.tsx we curretly have in the video controls section with the translate button a -2s and +2s buttons that 
+curretly dont do anything. Want we want to do is take these buttons and make it so that when the -2s button 
+is pressed it goes back 2 seconds in video, and when the plus 2 seconds button is pressed it goes forward 2 
+seconds on the video.
+
+Now we also need to follow specifics for these buttons, we want to remain in the clip boundries, so if the minus
+2 seconds button is pressed and we want to check if going back 2 secods would go back farther over the left boundery
+of the clip, and if it would we just go back to the starting of clip even if its less than 2 seconds, then lets
+think about the plus 2 seconds button, we want to make it so that if the plus 2 seconds button is pressed and it 
+would cause the video to go over the right clip boudry so the clip the end, we want to make it so that it just gets
+the time but to the beginning of the video
+
+Now we want to think about the obvisoues if the buttons are pressed and they wont interphere with any boundires,
+if the minus 2 seconds is pressed, we just back 2 seconds, if the forward 2 seconds is pressed we jump forward 2 seconds

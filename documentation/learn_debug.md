@@ -1,0 +1,6 @@
+Here is the problem that i am experiencing with the learn.tsx file.
+
+First let me explain how the flow should be:
+
+The user opens learn.tsx -> we go into the database and check the current_lesson_id for the user -->
+what ever lesson id it is at we pull that id key from the content table. ---> we then run our logic to check what the max id key is in the content table at the moment -> if the current id of the video that is being displayed is the max id key, want want the next video that is loaded in to be id of 1, where as then when it comes on the screen (the user sipwes up to it) we then go into the database and set their current_lesson_id to 1. Now lets say we run the function to get the max id and the current one is not the max id, then video that then will be loaded in will be the row in the content table with an id of 1 higher than the current, and then when the user swipes up to display that one on the screen we then write to the database for their new current_lesson_id. The name of the game is that we always want the app to be saving what the users current lessson id is, so that any time they go to the learn screen / open the app it always is playing their current video.

@@ -1,0 +1,110 @@
+
+CONTEXT OF NEW FEATURE: What we want to do is implement a feature that is integrated into the conversationalView screen of each video. Let me outline the flow of what we are creating. --- A user is on a video, the user is now is the keep learning section and they swipe over to the conversationalview screen, the user presses the record button to record their voice, the user waits for an ai response for how they did, if the response from the ai is not: "Great Job! You have mastered the phrase." then we need to write the information/data that is in this specific conversationalview template to the user_phrases table. now in this same conversationalview, the user will most likely keep retrying, if the user retrys and the ai response comes out to be "Great Job! You have mastered the phrase." then we need to wrtie the information of the phrase to the mastered_phrases table and then go into the user_phrases table and delete its row from there. We also need to work with cases as well. In the inital database action to write the phrase the to the user_profiles table we need to check if its already there (there is already a target_phrase associated with the users id) (we also want to check the mastered_phrases table to see if the phrase has already beem mastered, where then no writes will be made to the db for the instance.) then we will ofcourse not write it to that database.
+
+
+
+
+
+
+User Phrases Table
+This table tracks phrases that a user needs to work on. Each record represents a phrase the user attempted but did not master.
+
+pgsql
+Copy
++------------------------------+----------------------+----------------------------------------------------------+
+| Field Name                   | Data Type            | Description                                              |
++------------------------------+----------------------+----------------------------------------------------------+
+| id                           | SERIAL (Primary Key) | A unique identifier for each phrase record.            |
+| user_id                      | UUID                 | The unique identifier of the user (foreign key).       |
+| phrase_prompt                | TEXT                 | The prompt shown to the user (e.g., the question).       |
+| phrase_prompt_translation    | TEXT                 | The translation of the prompt.                           |
+| target_phrase                | TEXT                 | The phrase the user is expected to say.                  |
+| target_phrase_translation    | TEXT                 | The translation of the target phrase.                    |
+| status                       | TEXT                 | Indicates the phrase's status: "need_to_work_on" or "mastered". |
+| created_at                   | TIMESTAMPTZ          | Timestamp when the record was created.                   |
+| updated_at                   | TIMESTAMPTZ          | Timestamp when the record was last updated.              |
++------------------------------+----------------------+----------------------------------------------------------+
+Field Explanations
+id:
+An auto-incrementing primary key that uniquely identifies each phrase record.
+Why? This makes updates and lookups straightforward.
+
+user_id:
+The user's unique UUID (from the users table).
+Why? It associates each phrase record with a specific user, allowing a user to have multiple entries.
+
+phrase_prompt:
+The prompt text presented to the user (for example, “¡Ey! ¿Qué necesitamos para cenar esta noche?”).
+Why? It tells the user what they’re expected to respond to.
+
+phrase_prompt_translation:
+The translation of the prompt (for example, “Hey! What do we need to get for dinner tonight?”).
+Why? It ensures clarity for users who need it.
+
+target_phrase:
+The specific phrase the user is required to say (for example, “Tenemos que comprar productos.”).
+Why? This is the phrase that will be evaluated by the AI.
+
+target_phrase_translation:
+The translation of the target phrase (for example, “We have to buy products.”).
+Why? It provides clarity and context.
+
+status:
+A text field indicating whether the phrase is still marked as “need_to_work_on” or has been “mastered”.
+Why? It lets you easily query which phrases the user still needs to practice.
+
+created_at:
+A timestamp automatically set when the record is created.
+Why? Useful for tracking when a phrase was first flagged.
+
+updated_at:
+A timestamp automatically updated when the record is modified.
+Why? It helps track the latest changes to the record.
+
+Mastered Phrases Table
+This table tracks phrases that a user has successfully mastered. The structure is similar to the User Phrases table but includes a field to record when the phrase was mastered.
+
+pgsql
+Copy
++------------------------------+----------------------+----------------------------------------------------------+
+| Field Name                   | Data Type            | Description                                              |
++------------------------------+----------------------+----------------------------------------------------------+
+| id                           | SERIAL (Primary Key) | A unique identifier for each mastered phrase record.   |
+| user_id                      | UUID                 | The unique identifier of the user (foreign key).       |
+| phrase_prompt                | TEXT                 | The prompt shown to the user (e.g., the question).       |
+| phrase_prompt_translation    | TEXT                 | The translation of the prompt.                           |
+| target_phrase                | TEXT                 | The phrase the user was expected to say.                 |
+| target_phrase_translation    | TEXT                 | The translation of the target phrase.                    |
+| mastered_at                  | TIMESTAMPTZ          | Timestamp when the phrase was marked as mastered.        |
+| updated_at                   | TIMESTAMPTZ          | Timestamp when the record was last updated.              |
++------------------------------+----------------------+----------------------------------------------------------+
+Field Explanations
+id:
+An auto-incrementing primary key that uniquely identifies each mastered phrase record.
+
+user_id:
+The user's unique UUID from the users table.
+Why? It links each mastered phrase to the appropriate user.
+
+phrase_prompt:
+The original prompt the user saw.
+Why? It provides context for the mastered phrase.
+
+phrase_prompt_translation:
+The translation of the prompt.
+Why? For clarity, especially for non-native speakers.
+
+target_phrase:
+The phrase the user was required to say and eventually mastered.
+Why? This is the key phrase that was practiced.
+
+target_phrase_translation:
+The translation of the target phrase.
+Why? It helps clarify the intended phrase.
+
+mastered_at:
+The timestamp indicating when the phrase was successfully mastered.
+Why? It lets you track progress over time.
+
+updated_at:
+A timestamp that records any further interactions or updates with this record.

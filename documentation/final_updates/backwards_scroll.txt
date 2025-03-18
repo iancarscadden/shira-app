@@ -1,0 +1,24 @@
+New feature:
+
+We are now going to imeplement backwards scrolling in the learn.tsx. Right now the only way the user can scroll
+is by scrolling up to go to the next video, we are then reseting all of the states and as as refreshing all of 
+the data in learn.tsx pertaining to the video to now have the data of the video we are curretly on, as
+to not cause any bugs we want to keep it so that the only data that is in the app at a time relating to a peice
+of content is only that data for the peice of content. 
+
+How it is right now. Right now the user can swipe up to then activate actoins that take the users current_lesson_id
+incrment it by 1, pull in the data for the video at content id of the current_lesson_id + 1, and then set the users
+current_lesson_id in the database to be that n+1 value. 
+
+What we want to implement: we want to imeplemt a way now for the user to swipe down on the screen where in doing so
+we pull the current_lesson_id that they are on (call it n) we then go to n - 1 and we pull what is at n -1 in the content
+table, we then take n -1 and make that the new current_lesson_id for the user in the database. 
+
+What we need to add: we will need to add a file just like the NextVideoIndicator file for the now going backwards
+a video, with the sliding white gradient that slides all the way through the screen when the loading is completed. 
+This time it will be directed down though as we are in a sense just reversing the swipe up and all its effetcts.
+
+Now in thinking about the our new feature of going to the previous video, it in a sense is really just like the 
+same code and logic as going to the next video, just we are going backwards with the video id, so we need to make
+sure our code is nice and sound to handle this as well as updating in the database. We really want to make sure that
+we are alwasy refreshing all states and all data when a new video is read in. 
