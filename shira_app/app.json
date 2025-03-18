@@ -1,0 +1,89 @@
+{
+  "expo": {
+    "name": "Shira",
+    "slug": "shira_app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iancarscadden.shiraapp",
+      "config": {
+        "usesAppleSignIn": true,
+        "googleSignIn": {
+          "reservedClientId": "com.googleusercontent.apps.867223157980-skjjotkmfn2ott4mo75jgbt92vm3980o"
+        }
+      },
+      "associatedDomains": [
+        "applinks:friwhmjhptjucqwdsqei.supabase.co"
+      ],
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.867223157980-skjjotkmfn2ott4mo75jgbt92vm3980o",
+              "shira"
+            ]
+          }
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.iancarscadden.shiraapp",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "friwhmjhptjucqwdsqei.supabase.co",
+              "pathPrefix": "/auth/callback"
+            },
+            {
+              "scheme": "shira"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-splash-screen",
+      [
+        "expo-apple-authentication",
+        {
+          "serviceId": "com.iancarscadden.shiraapp"
+        }
+      ]
+    ],
+    "scheme": "shira",
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "e9f7dfc0-bb9c-4c61-814d-3dae7e36aff2"
+      }
+    },
+    "owner": "iancarscadden"
+  }
+}
