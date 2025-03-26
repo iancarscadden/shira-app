@@ -12,6 +12,8 @@ import {
     useWindowDimensions,
     PanResponder,
     Platform,
+    LayoutChangeEvent,
+    Dimensions,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +26,8 @@ import QuestionIcon from '../components/question.svg';
 import SettingsIcon from '../components/settings.svg';
 // @ts-ignore
 import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+// @ts-ignore
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 import ContextView from '../views/ContextView';
 import CulturalView from '../views/CulturalView';
@@ -67,7 +71,8 @@ import { VideoPlayerRef } from '../learn-components/types';
 // Import new components
 import SidebarView from '../views/SidebarView';
 import TabBar from '../views/TabBar';
-import { LinearGradient } from 'expo-linear-gradient';
+import DotIndicator from '../components/DotIndicator';
+import { Video } from 'expo-av';
 
 // Constants for the collapsible lessons container
 const TAB_BAR_HEIGHT = 60;
@@ -103,8 +108,6 @@ const debounce = <F extends (...args: any[]) => any>(
 // Inline KeepLearningSection component
 interface KeepLearningSectionProps {
     lesson: LessonContent;
-    isExpanded: boolean;
-    onToggle: () => void;
     width: number;
     topPosition: number;
     height: number;
@@ -112,7 +115,6 @@ interface KeepLearningSectionProps {
 }
 
 interface KeepLearningSectionState {
-    lessonsExpanded: boolean;
     currentScreenIndex: number;
 }
 
@@ -121,7 +123,6 @@ const keepLearningSectionPropsAreEqual = (prevProps: KeepLearningSectionProps, n
     // Only re-render if these specific props change
     return (
         prevProps.lesson?.video?.id === nextProps.lesson?.video?.id &&
-        prevProps.isExpanded === nextProps.isExpanded &&
         prevProps.width === nextProps.width &&
         // For animated values, we'll always consider them equal since they change constantly
         // and we handle their changes internally in the component
@@ -132,8 +133,6 @@ const keepLearningSectionPropsAreEqual = (prevProps: KeepLearningSectionProps, n
 // Memoize the KeepLearningSection component to prevent unnecessary re-renders
 const KeepLearningSection: React.FC<KeepLearningSectionProps> = React.memo(({
     lesson,
-    isExpanded,
-    onToggle,
     width,
     topPosition,
     height,
@@ -141,7 +140,6 @@ const KeepLearningSection: React.FC<KeepLearningSectionProps> = React.memo(({
 }) => {
     // Local state for horizontal scroll
     const [state, setState] = useState<KeepLearningSectionState>({
-        lessonsExpanded: isExpanded,
         currentScreenIndex: 0,
     });
 
@@ -164,17 +162,8 @@ const KeepLearningSection: React.FC<KeepLearningSectionProps> = React.memo(({
 
     // Reset screen index and scroll position when lesson changes
     useEffect(() => {
-        console.log('KeepLearningSection: Lesson changed, resetting scroll position', {
-            videoId: lesson?.video?.id,
-            lessonId: lesson?.video?.id,
-            hasContext: !!lesson?.context,
-            hasCultural: !!lesson?.cultural,
-            hasConversational: !!lesson?.conversational,
-            timestamp: new Date().toISOString()
-        });
-        
-        // Force reset state to initial values
-        setState({ lessonsExpanded: isExpanded, currentScreenIndex: 0 });
+        // Reset to initial screen index
+        setState({ currentScreenIndex: 0 });
         
         // Reset border color animation
         Animated.timing(borderColorAnim, {
@@ -186,22 +175,8 @@ const KeepLearningSection: React.FC<KeepLearningSectionProps> = React.memo(({
         // Force scroll back to the first screen
         if (scrollViewRef.current) {
             scrollViewRef.current.scrollTo({ x: 0, animated: false });
-            console.log('KeepLearningSection: Scrolled back to first screen');
         }
-    }, [lesson?.video?.id, isExpanded, borderColorAnim]);
-
-    // Add a new useEffect to handle expansion state changes
-    useEffect(() => {
-        console.log('KeepLearningSection: Expansion state changed', {
-            isExpanded,
-            currentState: state.lessonsExpanded
-        });
-        
-        // Update internal state when prop changes
-        if (isExpanded !== state.lessonsExpanded) {
-            setState(prev => ({ ...prev, lessonsExpanded: isExpanded }));
-        }
-    }, [isExpanded, state.lessonsExpanded]);
+    }, [lesson?.video?.id, borderColorAnim]);
 
     // Handle horizontal scroll
     const handleHorizontalScroll = useCallback((event: any) => {
@@ -240,111 +215,70 @@ const KeepLearningSection: React.FC<KeepLearningSectionProps> = React.memo(({
         }
     };
 
-    // Create animated background color for the header text container
-    const animatedHeaderBgColor = borderColorAnim.interpolate({
-        inputRange: [0, 1, 2, 3],
-        outputRange: [
-            "rgba(225, 81, 144, 0.5)", // Pink with higher opacity
-            "rgba(90, 81, 225, 0.5)",  // Purple with higher opacity
-            "rgba(81, 225, 162, 0.5)", // Teal with higher opacity
-            "rgba(196, 204, 69, 0.5)"  // Yellow with higher opacity
-        ]
-    });
-
     // Move console.log to useEffect to prevent it from running on every render
     useEffect(() => {
-        console.log('KeepLearningSection rendering with:', {
-            videoId: lesson?.video?.id,
-            isExpanded,
-            currentScreenIndex: state.currentScreenIndex
-        });
-    }, [lesson?.video?.id, isExpanded, state.currentScreenIndex]);
-
-    // Create a function to determine the color based on the current screen index
-    const getIconColor = () => {
-        switch (state.currentScreenIndex) {
-            case 0:
-                return "rgba(225, 81, 144, 0.8)"; // Pink
-            case 1:
-                return "rgba(90, 81, 225, 0.8)";  // Purple
-            case 2:
-                return "rgba(81, 225, 162, 0.8)"; // Teal
-            case 3:
-                return "rgba(196, 204, 69, 0.8)"; // Yellow
-            default:
-                return "rgba(225, 81, 144, 0.8)"; // Default to pink
-        }
-    };
+        // Component rendering logic without logging
+    }, [lesson?.video?.id, state.currentScreenIndex]);
 
     return (
-        <Animated.View
+        <View
             style={[
-                styles.collapsibleContainer,
+                styles.keepLearningContainer,
                 {
+                    width,
                     top: topPosition,
-                    height: height,
-                },
+                    height,
+                }
             ]}
         >
-            <BlurView style={styles.blurContainer} tint="dark" intensity={90}>
-                <View style={styles.containerHeader}>
-                    <TouchableOpacity 
-                        style={styles.headerTouchable}
-                        onPress={onToggle}
-                    >
-                        <View style={styles.headerContent}>
-                            <MaterialCommunityIcons 
-                                name="gesture-tap" 
-                                size={24} 
-                                color={getIconColor()}
-                                style={styles.headerIcon} 
-                            />
-                            <Text style={styles.lessonsHeaderText}>{getHeaderTitle()}</Text>
-                    </View>
-                </TouchableOpacity>
-                </View>
+            {/* Remove the header section */}
 
+            {/* Content area with horizontal scroll */}
                 <ScrollView
                     ref={scrollViewRef}
                     horizontal
                     pagingEnabled
                     showsHorizontalScrollIndicator={false}
+                scrollEnabled={true}
                     style={styles.scrollArea}
-                    contentContainerStyle={{ width: width * 4 }}
+                contentContainerStyle={{ flexDirection: 'row' }}
                     onScroll={handleHorizontalScroll}
                     scrollEventThrottle={16}
-                    scrollEnabled={isExpanded}
                     decelerationRate="fast"
                     snapToInterval={width}
                     snapToAlignment="center"
                 >
-                    <View style={{ width }}>
+                <View style={[styles.contentPage, { width }]}>
                         <ContextView 
                             key={`context-${lesson?.video?.id}`}
                             contextData={lesson?.context ?? null} 
                         />
                     </View>
-                    <View style={{ width }}>
+                <View style={[styles.contentPage, { width }]}>
                         <CulturalView 
                             key={`cultural-${lesson?.video?.id}`}
                             culturalData={lesson?.cultural ?? null} 
                         />
                     </View>
-                    <View style={{ width }}>
+                <View style={[styles.contentPage, { width }]}>
                         <ConversationalView 
                             key={`conversational-${lesson?.video?.id}`}
                             conversationalData={lesson?.conversational ?? null}
                         />
                     </View>
-                    <View style={{ width }}>
-                        <CompletionView 
-                            key={`completion-${lesson?.video?.id}`}
-                            isVisible={state.currentScreenIndex === 3}
+                <View style={[styles.contentPage, { width }]}>
+                    <CompletionView 
+                        key={`completion-${lesson?.video?.id}`}
+                        isVisible={state.currentScreenIndex === 3}
                         />
                     </View>
                 </ScrollView>
-            </BlurView>
-        </Animated.View>
+            
+            {/* Dot indicator at the bottom of the container */}
+            <View style={styles.dotIndicatorContainer}>
+                <DotIndicator totalDots={4} activeDotIndex={state.currentScreenIndex} />
+            </View>
+        </View>
     );
 }, keepLearningSectionPropsAreEqual);
 
@@ -446,9 +380,6 @@ const Learn: React.FC = () => {
     const lastEndTime = useRef<number>(0);
     const lastSeekTime = useRef<number>(0);
     const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-    
-    // Animation controller
-    const animationController = useMemo(() => new Animated.Value(0), []);
 
     // Main state reducer
     const [state, dispatch] = useReducer(learnReducer, initialLearnState);
@@ -462,9 +393,8 @@ const Learn: React.FC = () => {
     const [showConversationalView, setShowConversationalView] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showInstructions, setShowInstructions] = useState(false);
-    const [lessonsExpanded, setLessonsExpanded] = useState(false);
     const [showQuestionButton, setShowQuestionButton] = useState(true);
-    const [keyPhraseReplay, setKeyPhraseReplay] = useState<'off' | 'once'>('once');
+    const [keyPhraseReplay, setKeyPhraseReplay] = useState<'off' | 'once'>('off');
     const [translated, setTranslated] = useState(false);
 
     // Add video state
@@ -500,44 +430,40 @@ const Learn: React.FC = () => {
 
     // Calculate dimensions
     const videoHeight = (width * 9) / 16;
-    const controlsHeight = 80; // Height for controls including padding
+    const ELEMENT_PADDING = 16; // Use consistent padding between elements
+    const VIDEO_TO_CONTROLS_GAP = ELEMENT_PADDING;
+    const controlsHeight = 44; // Height of seek buttons container
     const FIXED_CONTAINER_HEIGHT = videoHeight + controlsHeight;
-    const initialFixedTop = (height - FIXED_CONTAINER_HEIGHT) / 2;
-    const finalFixedTop = insets.top; // Remove the extra padding to connect with safe area
-    const questionMarkTop = initialFixedTop - 60;
+    
+    // Final top position for the fixed container (video player)
+    const finalFixedTop = insets.top; // Remove the +20 padding to connect directly with safe area
+    const questionMarkTop = finalFixedTop - 60;
+    
+    // Fixed container position
+    const fixedContainerTop = finalFixedTop;
 
-    // Animation interpolations
-    const fixedContainerTopAnim = animationController.interpolate({
-        inputRange: [0, 1],
-        outputRange: [initialFixedTop, finalFixedTop],
-    });
-
-    const collapsedLessonsTop = height - TAB_BAR_HEIGHT - BOTTOM_MARGIN - COLLAPSED_HEIGHT - insets.bottom;
-    const expandedLessonsTop = finalFixedTop + FIXED_CONTAINER_HEIGHT + GAP_BETWEEN_CONTROLS_AND_LESSONS;
-    const expandedLessonsHeight = height - expandedLessonsTop - TAB_BAR_HEIGHT - BOTTOM_MARGIN - insets.bottom;
-
-    const lessonsTopAnim = animationController.interpolate({
-        inputRange: [0, 1],
-        outputRange: [collapsedLessonsTop, expandedLessonsTop],
-    });
-
-    const lessonsHeightAnim = animationController.interpolate({
-        inputRange: [0, 1],
-        outputRange: [COLLAPSED_HEIGHT, expandedLessonsHeight],
-    });
+    // Use consistent element positioning
+    const controlsTop = finalFixedTop + videoHeight + VIDEO_TO_CONTROLS_GAP;
+    
+    // Lessons section position and dimensions - reduce the space between controls and lessons
+    const lessonsTop = controlsTop + controlsHeight; // Removed spacing completely for a connected look
+    const lessonsHeight = height - lessonsTop - TAB_BAR_HEIGHT - BOTTOM_MARGIN - insets.bottom;
+    
+    // Background color for safe area
+    const safeAreaBgColor = '#000000'; // Change to black
+    
+    // Remove all duplicate variable declarations below this point
 
     // Background color animation for safe area
-    const safeAreaBgColorAnim = animationController.interpolate({
-        inputRange: [0, 1],
-        outputRange: ['#181818', '#000000'],
-    });
+    // const safeAreaBgColorAnim = animationController.interpolate({...});
+    // const uiElementsOpacity = animationController.interpolate({...});
 
     // Opacity animation for UI elements
-    const uiElementsOpacity = animationController.interpolate({
-        inputRange: [0, 0.2],
-        outputRange: [1, 0],
-        extrapolate: 'clamp',
-    });
+    // const uiElementsOpacity = animationController.interpolate({
+    //     inputRange: [0, 0.2],
+    //     outputRange: [1, 0],
+    //     extrapolate: 'clamp',
+    // });
 
     // Update captions based on current time
     useEffect(() => {
@@ -653,12 +579,8 @@ const Learn: React.FC = () => {
             setCurrentCaption(null);
             
             // Reset other UI states
-            setLessonsExpanded(false);
             setShowQuestionButton(true);
             setTranslated(false);
-            
-            // Reset animation
-            animationController.setValue(0);
             
             // Reset gesture state
             setGestureState({ isActive: false, gestureY: 0, direction: null });
@@ -735,15 +657,13 @@ const Learn: React.FC = () => {
             setShouldRepeatPhrase(false);
         
         // Reset UI state
-            setLessonsExpanded(false);
         setShowQuestionButton(true);
         setTranslated(false);
         setIsSeeking(false);
         
         // Reset animations
             pauseIndicatorOpacity.setValue(0);
-        animationController.setValue(0);
-        
+            
         // Log the reset
         logEvent('STATE_RESET_COMPLETED', {
             timestamp: new Date().toISOString()
@@ -753,7 +673,6 @@ const Learn: React.FC = () => {
         transitionState, 
         state.isTransitioning,
         state.currentLesson,
-        animationController,
         pauseIndicatorOpacity,
         // Include all setter functions
     ]);
@@ -972,27 +891,6 @@ const Learn: React.FC = () => {
     // Expose the current screen index from the KeepLearningSection for swipe gesture handling
     const [currentQuizScreenIndex, setCurrentQuizScreenIndex] = useState<number>(0);
 
-    // Toggle lessons expanded state
-    const toggleLessons = useCallback(() => {
-        // Remove the condition that prevents re-expansion
-        // Allow toggle regardless of isFirstPlay state
-
-        if (!lessonsExpanded) {
-            setShowQuestionButton(false);
-        }
-
-        Animated.timing(animationController, {
-            toValue: lessonsExpanded ? 0 : 1,
-            duration: 300,
-            useNativeDriver: false,
-        }).start(() => {
-            setLessonsExpanded(!lessonsExpanded);
-            if (lessonsExpanded) {
-                setShowQuestionButton(true);
-            }
-        });
-    }, [lessonsExpanded, animationController]);
-
     // Handle previous video transition
     const handlePreviousVideo = useCallback(async () => {
         if (!user?.target_lang || !state.currentLesson || state.isTransitioning) {
@@ -1112,6 +1010,12 @@ const Learn: React.FC = () => {
     // Update the panResponder to handle swiping down
     const panResponder = useMemo(() => PanResponder.create({
         onMoveShouldSetPanResponder: (_, gestureState) => {
+            // Only respond to gestures when on the completion screen (4th screen, index 3)
+            // or when not in any of the learning content screens
+            if (currentQuizScreenIndex !== 3 && currentQuizScreenIndex >= 0) {
+                return false;
+            }
+            
             // Only respond to vertical gestures
             return Math.abs(gestureState.dy) > Math.abs(gestureState.dx * 3) && Math.abs(gestureState.dy) > 10;
         },
@@ -1119,6 +1023,11 @@ const Learn: React.FC = () => {
             // Initial touch
         },
         onPanResponderMove: (_, gestureState) => {
+            // Don't track movement if not on completion screen and in learning content
+            if (currentQuizScreenIndex !== 3 && currentQuizScreenIndex >= 0) {
+                return;
+            }
+            
             // Get direction based on dy
             const direction = gestureState.dy > 0 ? 'down' : 'up';
             
@@ -1132,35 +1041,8 @@ const Learn: React.FC = () => {
             });
         },
         onPanResponderRelease: (_, gestureState) => {
-            // Check if on CompletionView
-            const isOnCompletionView = lessonsExpanded && currentQuizScreenIndex === 3;
-            
-            // Special handling when on CompletionView
-            if (isOnCompletionView && gestureState.dy < -80) {
-                // Log the swipe gesture on completion view
-                logEvent('SWIPE_UP_FROM_COMPLETION_VIEW', {
-                    gestureY: gestureState.dy,
-                    currentLessonId: state.currentLesson?.id,
-                    currentScreen: currentQuizScreenIndex
-                });
-                
-                // First collapse the lessons panel
-                toggleLessons();
-                
-                // Set the gesture state for the animation
-                setGestureState({ 
-                    isActive: false, 
-                    gestureY: Math.abs(gestureState.dy) * 1.2,
-                    direction: 'up' 
-                });
-                
-                // Start loading the next video
-                handleNextVideo();
-                return;
-            }
-            
-            // Standard handling when lessons are expanded (not on CompletionView)
-            if (lessonsExpanded && !isOnCompletionView) {
+            // Early return if not on completion screen and in learning content
+            if (currentQuizScreenIndex !== 3 && currentQuizScreenIndex >= 0) {
                 setGestureState({ isActive: false, gestureY: 0, direction: null });
                 return;
             }
@@ -1204,7 +1086,7 @@ const Learn: React.FC = () => {
         onPanResponderTerminate: () => {
             setGestureState({ isActive: false, gestureY: 0, direction: null });
         },
-    }), [lessonsExpanded, handleNextVideo, handlePreviousVideo, currentQuizScreenIndex, toggleLessons, logEvent, state.currentLesson]);
+    }), [handleNextVideo, handlePreviousVideo, currentQuizScreenIndex, logEvent, state.currentLesson]);
 
     // Create a debounced version of the seek function
     const debouncedSeek = useCallback(
@@ -1753,21 +1635,17 @@ const Learn: React.FC = () => {
         return {
             key: `keep-learning-${state.currentLesson.id}-${state.currentLesson.data.video.id}`,
             lesson: state.currentLesson.data,
-            isExpanded: lessonsExpanded,
-            onToggle: toggleLessons,
-            width: width - 40,
-            topPosition: lessonsTopAnim,
-            height: lessonsHeightAnim,
+            width: width - 40, // 20px padding on each side
+            topPosition: lessonsTop,
+            height: lessonsHeight,
             onScreenIndexChange: handleScreenIndexChange
         };
     }, [
         state.currentLesson?.id,
         state.currentLesson?.data.video.id,
-        lessonsExpanded,
-        toggleLessons,
         width,
-        lessonsTopAnim,
-        lessonsHeightAnim,
+        lessonsTop,
+        lessonsHeight,
         handleScreenIndexChange
     ]);
 
@@ -2275,48 +2153,16 @@ const Learn: React.FC = () => {
                     styles.topBlock, 
                     { 
                         height: insets.top,
-                        backgroundColor: safeAreaBgColorAnim 
+                        backgroundColor: safeAreaBgColor 
                     }
                 ]} 
             />
-
-            {/* Tab Navigation - Now with opacity animation */}
-            <Animated.View style={[
-                styles.tabNavigationContainer,
-                { 
-                    opacity: uiElementsOpacity,
-                    top: insets.top + 20 
-                }
-            ]}>
-                {/* Add back the Explore title with World icon */}
-                <View style={styles.titleContainer}>
-                    <Text style={styles.titleText}>Explore</Text>
-                    <WorldIcon
-                    width={24} 
-                    height={24} 
-                        fill="none"
-                        stroke="#FFFFFF"
-                        strokeWidth={2}
-                        style={{ marginLeft: 8 }}
-                    />
-                </View>
-                
-                <TouchableOpacity 
-                    style={{ position: 'absolute', right: 20 }}
-                    onPress={() => setShowSettings(true)}
-                >
-                    <SettingsIcon 
-                        width={24} 
-                        height={24} 
-                    />
-                </TouchableOpacity>
-            </Animated.View>
 
             {/* Gesture container */}
             <View style={styles.gestureContainer} {...panResponder.panHandlers}>
                 {/* Video Player */}
                 <Animated.View style={[styles.fixedContainer, { 
-                    top: fixedContainerTopAnim,
+                    top: fixedContainerTop,
                     height: FIXED_CONTAINER_HEIGHT,
                 }]}>
                     {state.currentLesson && (
@@ -2428,346 +2274,356 @@ const Learn: React.FC = () => {
                                             </Animated.View>
                                         )}
                                     </TouchableOpacity>
-                                    {currentCaption && (
+                                    
+                                    {/* Translate button moved to bottom left corner */}
+                                    <TouchableOpacity
+                                        style={styles.translateButtonCorner}
+                                        onPress={() => setTranslated(!translated)}
+                                        activeOpacity={0.7}
+                                    >
+                                        <TranslateIcon 
+                                            width={22} 
+                                            height={22} 
+                                            fill={translated ? "#ffffff" : "#888888"} // Gray when off, white when on
+                                        />
+                                    </TouchableOpacity>
+
+                                    {/* Caption overlay */}
                                         <View style={styles.captionOverlay} pointerEvents="none">
-                                            <Text style={[
-                                                styles.captionText,
-                                                translated && styles.translatedCaptionText
-                                            ]}>
+                                        {currentCaption && (
+                                            <View style={styles.captionWrapper}>
+                                                <Text style={[
+                                                    styles.captionText,
+                                                ]}>
                                                 {(() => {
+                                                        // Skip highlighting if there's no highlight phrase
+                                                        if (!state.currentLesson?.data.video.highlightPhrase || state.currentLesson.data.video.highlightPhrase.trim() === '') {
+                                                            return translated ? currentCaption.nativeLangLine : currentCaption.targetLangLine;
+                                                        }
+                                                        
+                                                        // Set up for highlighting
                                                     const text = translated ? currentCaption.nativeLangLine : currentCaption.targetLangLine;
-                                                    const highlightPhrase = state.currentLesson?.data.video.highlightPhrase;
-                                                    
-                                                    // If there's no highlight phrase or we're in translated mode, just return the text
-                                                    if (!highlightPhrase || translated || highlightPhrase.trim() === '') return text;
-                                                    
-                                                    // Helper functions for more robust text matching
-                                                    const escapeRegExp = (string: string) => {
-                                                        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                                                    };
-                                                    
-                                                    const normalizeText = (text: string) => {
-                                                        return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                                                    };
-                                                    
-                                                    const stripPunctuation = (text: string) => {
-                                                        return text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s+/g, " ").trim();
-                                                    };
-                                                    
-                                                    // Try different matching strategies
-                                                    let parts = [];
-                                                    let foundMatch = false;
-                                                    
-                                                    try {
-                                                        // Strategy 1: Standard case-insensitive matching with escaped regex
-                                                        const escapedPhrase = escapeRegExp(highlightPhrase.trim());
-                                                        const standardRegex = new RegExp(`(${escapedPhrase})`, 'i');
-                                                        parts = text.split(standardRegex);
+                                                        const highlightPhrase = state.currentLesson.data.video.highlightPhrase;
                                                         
-                                                        // If we got more than one part, we found a match
-                                                        if (parts.length > 1) {
-                                                            foundMatch = true;
-                                                            
-                                                            if (DEBUG_MODE) {
-                                                                console.log('Phrase highlight match using standard regex:', {
-                                                                    caption: text,
-                                                                    highlightPhrase,
-                                                                    parts
-                                                                });
-                                                            }
-                                                        } 
+                                                        // If we're in translated mode, just return the text without highlighting
+                                                        if (translated) return text;
                                                         
-                                                        // Strategy 2: Try with normalized text (removes accents, etc.)
-                                                        if (!foundMatch) {
-                                                            const normalizedText = normalizeText(text);
-                                                            const normalizedPhrase = normalizeText(highlightPhrase);
-                                                            const normalizedRegex = new RegExp(`(${escapeRegExp(normalizedPhrase)})`, 'i');
-                                                            
-                                                            // We need to find the match in the normalized text, but highlight in the original
-                                                            const normalizedParts = normalizedText.split(normalizedRegex);
-                                                            
-                                                            if (normalizedParts.length > 1) {
-                                                                // If we found a match in normalized text, we need to locate it in the original
-                                                                const matchIndex = normalizedText.toLowerCase().indexOf(normalizedPhrase.toLowerCase());
-                                                                
-                                                                if (matchIndex >= 0) {
-                                                                    const matchLength = normalizedPhrase.length;
-                                                                    const beforeMatch = text.substring(0, matchIndex);
-                                                                    const matchedText = text.substring(matchIndex, matchIndex + matchLength);
-                                                                    const afterMatch = text.substring(matchIndex + matchLength);
-                                                                    
-                                                                    parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
-                                                                    foundMatch = true;
-                                                                    
-                                                                    if (DEBUG_MODE) {
-                                                                        console.log('Phrase highlight match using normalized text:', {
-                                                                            caption: text,
-                                                                            highlightPhrase,
-                                                                            normalizedText,
-                                                                            normalizedPhrase,
-                                                                            matchIndex,
-                                                                            parts
-                                                                        });
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
+                                                        // Helper functions for more robust text matching
+                                                        const escapeRegExp = (string: string) => {
+                                                            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                                                        };
                                                         
-                                                        // Strategy 3: Try with punctuation removed
-                                                        if (!foundMatch) {
-                                                            const strippedText = stripPunctuation(text);
-                                                            const strippedPhrase = stripPunctuation(highlightPhrase);
-                                                            const strippedRegex = new RegExp(`(${escapeRegExp(strippedPhrase)})`, 'i');
-                                                            
-                                                            // Find the match in the stripped text
-                                                            const strippedMatch = strippedText.match(strippedRegex);
-                                                            
-                                                            if (strippedMatch && strippedMatch.index !== undefined) {
-                                                                // We need to map this back to the original text
-                                                                // This is more complex, so we'll use a simplified approach
-                                                                const lowerText = text.toLowerCase();
-                                                                const lowerPhrase = highlightPhrase.toLowerCase();
-                                                                const fuzzyIndex = lowerText.indexOf(lowerPhrase);
-                                                                
-                                                                if (fuzzyIndex >= 0) {
-                                                                    const beforeMatch = text.substring(0, fuzzyIndex);
-                                                                    const matchedText = text.substring(fuzzyIndex, fuzzyIndex + highlightPhrase.length);
-                                                                    const afterMatch = text.substring(fuzzyIndex + highlightPhrase.length);
-                                                                    
-                                                                    parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
-                                                                    foundMatch = true;
-                                                                    
-                                                                    if (DEBUG_MODE) {
-                                                                        console.log('Phrase highlight match using punctuation stripping:', {
-                                                                            caption: text,
-                                                                            highlightPhrase,
-                                                                            strippedText,
-                                                                            strippedPhrase,
-                                                                            fuzzyIndex,
-                                                                            parts
-                                                                        });
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
+                                                        const normalizeText = (text: string) => {
+                                                            return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+                                                        };
                                                         
-                                                        // Strategy 4: Try a more flexible substring matching approach
-                                                        if (!foundMatch) {
-                                                            // First, normalize both the text and phrase
-                                                            const normalizedText = normalizeText(text);
-                                                            const normalizedPhrase = normalizeText(highlightPhrase);
-                                                            
-                                                            // Look for the normalized phrase anywhere in the normalized text
-                                                            const phraseIndex = normalizedText.indexOf(normalizedPhrase);
-                                                            
-                                                            if (phraseIndex >= 0) {
-                                                                // We need to map this index back to the original text
-                                                                // This is approximate but works for most cases
-                                                                const originalIndex = findApproximateIndex(text, highlightPhrase, phraseIndex);
-                                                                
-                                                                if (originalIndex >= 0) {
-                                                                    const beforeMatch = text.substring(0, originalIndex);
-                                                                    // Use original text length to preserve capitalization
-                                                                    const matchLength = Math.min(highlightPhrase.length, text.length - originalIndex);
-                                                                    const matchedText = text.substring(originalIndex, originalIndex + matchLength);
-                                                                    const afterMatch = text.substring(originalIndex + matchLength);
-                                                                    
-                                                                    parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
-                                                                    foundMatch = true;
-                                                                    
-                                                                    if (DEBUG_MODE) {
-                                                                        console.log('Phrase highlight match using flexible substring approach:', {
-                                                                            caption: text,
-                                                                            highlightPhrase,
-                                                                            normalizedText,
-                                                                            normalizedPhrase,
-                                                                            phraseIndex,
-                                                                            originalIndex,
-                                                                            parts
-                                                                        });
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
+                                                        const stripPunctuation = (text: string) => {
+                                                            return text.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, " ").replace(/\s+/g, " ").trim();
+                                                        };
                                                         
-                                                        // Strategy 5: Try fuzzy character-by-character approximate matching
-                                                        if (!foundMatch) {
-                                                            // Convert to lowercase for comparison
-                                                            const lowerText = text.toLowerCase();
-                                                            const lowerPhrase = highlightPhrase.toLowerCase();
+                                                        // Try different matching strategies
+                                                        let parts = [];
+                                                        let foundMatch = false;
+                                                        
+                                                        try {
+                                                            // Strategy 1: Standard case-insensitive matching with escaped regex
+                                                            const escapedPhrase = escapeRegExp(highlightPhrase.trim());
+                                                            const standardRegex = new RegExp(`(${escapedPhrase})`, 'i');
+                                                            parts = text.split(standardRegex);
                                                             
-                                                            // Try to find the best matching substring
-                                                            let bestMatchIndex = -1;
-                                                            let bestMatchLen = 0;
-                                                            
-                                                            // Loop through potential starting positions
-                                                            for (let i = 0; i < lowerText.length - 3; i++) {
-                                                                // Count matching characters starting from this position
-                                                                let matchCount = 0;
-                                                                for (let j = 0; j < lowerPhrase.length && i + j < lowerText.length; j++) {
-                                                                    if (lowerText[i + j] === lowerPhrase[j]) {
-                                                                        matchCount++;
-                                                                    }
-                                                                }
-                                                                
-                                                                // If we found a better match, update our best match
-                                                                const matchPercentage = matchCount / lowerPhrase.length;
-                                                                if (matchPercentage > 0.7 && matchCount > bestMatchLen) {
-                                                                    bestMatchIndex = i;
-                                                                    bestMatchLen = matchCount;
-                                                                }
-                                                            }
-                                                            
-                                                            // If we found a good match, use it
-                                                            if (bestMatchIndex >= 0) {
-                                                                const beforeMatch = text.substring(0, bestMatchIndex);
-                                                                const matchedText = text.substring(bestMatchIndex, bestMatchIndex + highlightPhrase.length);
-                                                                const afterMatch = text.substring(bestMatchIndex + highlightPhrase.length);
-                                                                
-                                                                parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
+                                                            // If we got more than one part, we found a match
+                                                            if (parts.length > 1) {
                                                                 foundMatch = true;
                                                                 
                                                                 if (DEBUG_MODE) {
-                                                                    console.log('Phrase highlight match using fuzzy character matching:', {
+                                                                    console.log('Phrase highlight match using standard regex:', {
                                                                         caption: text,
                                                                         highlightPhrase,
-                                                                        bestMatchIndex,
-                                                                        bestMatchLen,
-                                                                        matchPercentage: bestMatchLen / lowerPhrase.length,
                                                                         parts
                                                                     });
                                                                 }
-                                                            }
-                                                        }
-                                                        
-                                                        // If we still haven't found a match, just do a simple word-by-word search
-                                                        if (!foundMatch) {
-                                                            const words = text.split(' ');
-                                                            const phraseWords = highlightPhrase.split(' ');
+                                                            } 
                                                             
-                                                            // If the highlight phrase is just one word, try to find it
-                                                            if (phraseWords.length === 1) {
-                                                                for (let i = 0; i < words.length; i++) {
-                                                                    if (normalizeText(words[i]) === normalizeText(phraseWords[0])) {
-                                                                        // Found a matching word
-                                                                        const beforeMatch = words.slice(0, i).join(' ') + (i > 0 ? ' ' : '');
-                                                                        const matchedText = words[i];
-                                                                        const afterMatch = (i < words.length - 1 ? ' ' : '') + words.slice(i + 1).join(' ');
+                                                            // Strategy 2: Try with normalized text (removes accents, etc.)
+                                                            if (!foundMatch) {
+                                                                const normalizedText = normalizeText(text);
+                                                                const normalizedPhrase = normalizeText(highlightPhrase);
+                                                                const normalizedRegex = new RegExp(`(${escapeRegExp(normalizedPhrase)})`, 'i');
+                                                                
+                                                                // We need to find the match in the normalized text, but highlight in the original
+                                                                const normalizedParts = normalizedText.split(normalizedRegex);
+                                                                
+                                                                if (normalizedParts.length > 1) {
+                                                                    // If we found a match in normalized text, we need to locate it in the original
+                                                                    const matchIndex = normalizedText.toLowerCase().indexOf(normalizedPhrase.toLowerCase());
+                                                                    
+                                                                    if (matchIndex >= 0) {
+                                                                        const matchLength = normalizedPhrase.length;
+                                                                        const beforeMatch = text.substring(0, matchIndex);
+                                                                        const matchedText = text.substring(matchIndex, matchIndex + matchLength);
+                                                                        const afterMatch = text.substring(matchIndex + matchLength);
                                                                         
                                                                         parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
                                                                         foundMatch = true;
                                                                         
                                                                         if (DEBUG_MODE) {
-                                                                            console.log('Phrase highlight match using single word match:', {
+                                                                            console.log('Phrase highlight match using normalized text:', {
                                                                                 caption: text,
                                                                                 highlightPhrase,
-                                                                                matchedWord: words[i],
+                                                                                normalizedText,
+                                                                                normalizedPhrase,
+                                                                                matchIndex,
                                                                                 parts
                                                                             });
                                                                         }
-                                                                        break;
                                                                     }
                                                                 }
                                                             }
-                                                        }
-
-                                                        // If we still haven't found a match, just return the original text
-                                                        if (!foundMatch) {
-                                                            if (DEBUG_MODE) {
-                                                                console.log('No phrase highlight match found:', {
-                                                                    caption: text,
-                                                                    highlightPhrase
-                                                                });
-                                                            }
-                                                            return text;
-                                                        }
-                                                        
-                                                        // Helper function to find the approximate index in original text
-                                                        function findApproximateIndex(originalText: string, phrase: string, normalizedIndex: number): number {
-                                                            // Simple approach: just try a direct mapping first
-                                                            const directIndex = originalText.toLowerCase().indexOf(phrase.toLowerCase());
-                                                            if (directIndex >= 0) {
-                                                                return directIndex;
+                                                            
+                                                            // Strategy 3: Try with punctuation removed
+                                                            if (!foundMatch) {
+                                                                const strippedText = stripPunctuation(text);
+                                                                const strippedPhrase = stripPunctuation(highlightPhrase);
+                                                                const strippedRegex = new RegExp(`(${escapeRegExp(strippedPhrase)})`, 'i');
+                                                                
+                                                                // Find the match in the stripped text
+                                                                const strippedMatch = strippedText.match(strippedRegex);
+                                                                
+                                                                if (strippedMatch && strippedMatch.index !== undefined) {
+                                                                    // We need to map this back to the original text
+                                                                    // This is more complex, so we'll use a simplified approach
+                                                                    const lowerText = text.toLowerCase();
+                                                                    const lowerPhrase = highlightPhrase.toLowerCase();
+                                                                    const fuzzyIndex = lowerText.indexOf(lowerPhrase);
+                                                                    
+                                                                    if (fuzzyIndex >= 0) {
+                                                                        const beforeMatch = text.substring(0, fuzzyIndex);
+                                                                        const matchedText = text.substring(fuzzyIndex, fuzzyIndex + highlightPhrase.length);
+                                                                        const afterMatch = text.substring(fuzzyIndex + highlightPhrase.length);
+                                                                        
+                                                                        parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
+                                                                        foundMatch = true;
+                                                                        
+                                                                        if (DEBUG_MODE) {
+                                                                            console.log('Phrase highlight match using punctuation stripping:', {
+                                                                                caption: text,
+                                                                                highlightPhrase,
+                                                                                strippedText,
+                                                                                strippedPhrase,
+                                                                                fuzzyIndex,
+                                                                                parts
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                             
-                                                            // If that fails, try using the normalized index as an approximation
-                                                            // This won't be perfect but should work for most cases
-                                                            return Math.min(normalizedIndex, originalText.length - 1);
-                                                        }
-                                                        
-                                                        // Map the parts to Text components, highlighting the matched parts
-                                                        return parts.map((part, index) => {
-                                                            // More flexible highlight detection
-                                                            const isHighlight = 
-                                                                part.toLowerCase() === highlightPhrase.toLowerCase() ||
-                                                                normalizeText(part) === normalizeText(highlightPhrase) ||
-                                                                // Check for partial matches too
-                                                                (parts.length === 3 && index === 1);
+                                                            // Strategy 4: Try a more flexible substring matching approach
+                                                            if (!foundMatch) {
+                                                                // First, normalize both the text and phrase
+                                                                const normalizedText = normalizeText(text);
+                                                                const normalizedPhrase = normalizeText(highlightPhrase);
                                                                 
-                                                            return isHighlight ? (
+                                                                // Look for the normalized phrase anywhere in the normalized text
+                                                                const phraseIndex = normalizedText.indexOf(normalizedPhrase);
+                                                                
+                                                                if (phraseIndex >= 0) {
+                                                                    // We need to map this index back to the original text
+                                                                    // This is approximate but works for most cases
+                                                                    const originalIndex = findApproximateIndex(text, highlightPhrase, phraseIndex);
+                                                                    
+                                                                    if (originalIndex >= 0) {
+                                                                        const beforeMatch = text.substring(0, originalIndex);
+                                                                        // Use original text length to preserve capitalization
+                                                                        const matchLength = Math.min(highlightPhrase.length, text.length - originalIndex);
+                                                                        const matchedText = text.substring(originalIndex, originalIndex + matchLength);
+                                                                        const afterMatch = text.substring(originalIndex + matchLength);
+                                                                        
+                                                                        parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
+                                                                        foundMatch = true;
+                                                                        
+                                                                        if (DEBUG_MODE) {
+                                                                            console.log('Phrase highlight match using flexible substring approach:', {
+                                                                                caption: text,
+                                                                                highlightPhrase,
+                                                                                normalizedText,
+                                                                                normalizedPhrase,
+                                                                                phraseIndex,
+                                                                                originalIndex,
+                                                                                parts
+                                                                            });
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            // Strategy 5: Try fuzzy character-by-character approximate matching
+                                                            if (!foundMatch) {
+                                                                // Convert to lowercase for comparison
+                                                                const lowerText = text.toLowerCase();
+                                                                const lowerPhrase = highlightPhrase.toLowerCase();
+                                                                
+                                                                // Try to find the best matching substring
+                                                                let bestMatchIndex = -1;
+                                                                let bestMatchLen = 0;
+                                                                
+                                                                // Loop through potential starting positions
+                                                                for (let i = 0; i < lowerText.length - 3; i++) {
+                                                                    // Count matching characters starting from this position
+                                                                    let matchCount = 0;
+                                                                    for (let j = 0; j < lowerPhrase.length && i + j < lowerText.length; j++) {
+                                                                        if (lowerText[i + j] === lowerPhrase[j]) {
+                                                                            matchCount++;
+                                                                        }
+                                                                    }
+                                                                    
+                                                                    // If we found a better match, update our best match
+                                                                    const matchPercentage = matchCount / lowerPhrase.length;
+                                                                    if (matchPercentage > 0.7 && matchCount > bestMatchLen) {
+                                                                        bestMatchIndex = i;
+                                                                        bestMatchLen = matchCount;
+                                                                    }
+                                                                }
+                                                                
+                                                                // If we found a good match, use it
+                                                                if (bestMatchIndex >= 0) {
+                                                                    const beforeMatch = text.substring(0, bestMatchIndex);
+                                                                    const matchedText = text.substring(bestMatchIndex, bestMatchIndex + highlightPhrase.length);
+                                                                    const afterMatch = text.substring(bestMatchIndex + highlightPhrase.length);
+                                                                    
+                                                                    parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
+                                                                    foundMatch = true;
+                                                                    
+                                                                    if (DEBUG_MODE) {
+                                                                        console.log('Phrase highlight match using fuzzy character matching:', {
+                                                                            caption: text,
+                                                                            highlightPhrase,
+                                                                            bestMatchIndex,
+                                                                            bestMatchLen,
+                                                                            matchPercentage: bestMatchLen / lowerPhrase.length,
+                                                                            parts
+                                                                        });
+                                                                    }
+                                                                }
+                                                            }
+                                                            
+                                                            // If we still haven't found a match, just do a simple word-by-word search
+                                                            if (!foundMatch) {
+                                                                const words = text.split(' ');
+                                                                const phraseWords = highlightPhrase.split(' ');
+                                                                
+                                                                // If the highlight phrase is just one word, try to find it
+                                                                if (phraseWords.length === 1) {
+                                                                    for (let i = 0; i < words.length; i++) {
+                                                                        if (normalizeText(words[i]) === normalizeText(phraseWords[0])) {
+                                                                            // Found a matching word
+                                                                            const beforeMatch = words.slice(0, i).join(' ') + (i > 0 ? ' ' : '');
+                                                                            const matchedText = words[i];
+                                                                            const afterMatch = (i < words.length - 1 ? ' ' : '') + words.slice(i + 1).join(' ');
+                                                                            
+                                                                            parts = [beforeMatch, matchedText, afterMatch].filter(part => part !== '');
+                                                                            foundMatch = true;
+                                                                            
+                                                                            if (DEBUG_MODE) {
+                                                                                console.log('Phrase highlight match using single word match:', {
+                                                                                    caption: text,
+                                                                                    highlightPhrase,
+                                                                                    matchedWord: words[i],
+                                                                                    parts
+                                                                                });
+                                                                            }
+                                                                            break;
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            // If we still haven't found a match, just return the original text
+                                                            if (!foundMatch) {
+                                                                if (DEBUG_MODE) {
+                                                                    console.log('No phrase highlight match found:', {
+                                                                        caption: text,
+                                                                        highlightPhrase
+                                                                    });
+                                                                }
+                                                                return text;
+                                                            }
+                                                            
+                                                            // Helper function to find the approximate index in original text
+                                                            function findApproximateIndex(originalText: string, phrase: string, normalizedIndex: number): number {
+                                                                // Simple approach: just try a direct mapping first
+                                                                const directIndex = originalText.toLowerCase().indexOf(phrase.toLowerCase());
+                                                                if (directIndex >= 0) {
+                                                                    return directIndex;
+                                                                }
+                                                                
+                                                                // If that fails, try using the normalized index as an approximation
+                                                                // This won't be perfect but should work for most cases
+                                                                return Math.min(normalizedIndex, originalText.length - 1);
+                                                            }
+                                                            
+                                                            // Map the parts to Text components, highlighting the matched parts
+                                                            return parts.map((part, index) => {
+                                                                // More flexible highlight detection
+                                                                const isHighlight = 
+                                                                    part.toLowerCase() === highlightPhrase.toLowerCase() ||
+                                                                    normalizeText(part) === normalizeText(highlightPhrase) ||
+                                                                    // Check for partial matches too
+                                                                    (parts.length === 3 && index === 1);
+                                                                    
+                                                                return isHighlight ? (
                                                             <Text key={index} style={styles.highlightedPhrase}>
                                                                 {part}
                                                             </Text>
                                                         ) : (
                                                             <Text key={index}>{part}</Text>
-                                                            );
-                                                        });
-                                                    } catch (error) {
-                                                        // If anything goes wrong, just return the original text
-                                                        console.error('Error in phrase highlighting:', error);
-                                                        return text;
-                                                    }
+                                                                );
+                                                            });
+                                                        } catch (error) {
+                                                            // If anything goes wrong, just return the original text
+                                                            console.error('Error in phrase highlighting:', error);
+                                                            return text;
+                                                        }
                                                 })()}
                                             </Text>
                                         </View>
                                     )}
+                                    </View>
                                 </View>
                             </View>
                             
-                            {/* Integrated Video Controls */}
+                            {/* Integrated Video Controls - Seek buttons only */}
                             <View style={styles.controlsContainer}>
-                                <BlurView style={styles.controlsBlur} tint="dark" intensity={30}>
-                                    <View style={styles.controlsRow}>
-                                        <View style={styles.sliderContainer}>
-                                            {/* Seek buttons that fill available space */}
-                                            <View style={styles.seekButtonsContainer}>
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.seekButton,
-                                                        (isSeeking || !videoState.isReady || state.isTransitioning) && { opacity: 0.5 }
-                                                    ]}
-                                                    onPress={() => handleSeekOffset(-2)}
-                                                    disabled={isSeeking || !videoState.isReady || state.isTransitioning}
-                                                >
-                                                    <Text style={styles.seekButtonText}>- 2s</Text>
-                                                </TouchableOpacity>
-                                                
-                                                <TouchableOpacity
-                                                    style={[
-                                                        styles.seekButton,
-                                                        (isSeeking || !videoState.isReady || state.isTransitioning) && { opacity: 0.5 }
-                                                    ]}
-                                                    onPress={() => handleSeekOffset(2)}
-                                                    disabled={isSeeking || !videoState.isReady || state.isTransitioning}
-                                                >
-                                                    <Text style={styles.seekButtonText}>+ 2s</Text>
-                                                </TouchableOpacity>
-                                            </View>
+                                <View style={styles.seekButtonsContainer}>
+                                    {/* Seek back button */}
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.seekButton,
+                                            (isSeeking || !videoState.isReady || state.isTransitioning) && { opacity: 0.5 }
+                                        ]}
+                                        onPress={() => handleSeekOffset(-2)}
+                                        disabled={isSeeking || !videoState.isReady || state.isTransitioning}
+                                    >
+                                        <View style={[styles.seekButtonContent, { justifyContent: 'flex-start' }]}>
+                                            <MaterialCommunityIcons name="arrow-left" size={16} color="#AAAAAA" />
+                                            <Text style={styles.seekButtonText}>2s</Text>
                                         </View>
+                                    </TouchableOpacity>
 
                                         <TouchableOpacity
-                                            style={styles.translateButton}
-                                            onPress={() => setTranslated(!translated)}
-                                            activeOpacity={1} // Add this to prevent default opacity change on press
-                                        >
-                                            <TranslateIcon 
-                                                width={22} 
-                                                height={22} 
-                                                fill={translated ? "#e15190" : "#888888"}
-                                            />
+                                        style={[
+                                            styles.seekButton,
+                                            (isSeeking || !videoState.isReady || state.isTransitioning) && { opacity: 0.5 }
+                                        ]}
+                                        onPress={() => handleSeekOffset(2)}
+                                        disabled={isSeeking || !videoState.isReady || state.isTransitioning}
+                                    >
+                                        <View style={[styles.seekButtonContent, { justifyContent: 'flex-end' }]}>
+                                            <Text style={styles.seekButtonText}>2s</Text>
+                                            <MaterialCommunityIcons name="arrow-right" size={16} color="#AAAAAA" />
+                                        </View>
                                         </TouchableOpacity>
                                     </View>
-                                </BlurView>
                             </View>
                         </>
                     )}
@@ -2778,8 +2634,6 @@ const Learn: React.FC = () => {
                     <KeepLearningSection
                         key={keepLearningSectionProps.key}
                         lesson={keepLearningSectionProps.lesson}
-                        isExpanded={keepLearningSectionProps.isExpanded}
-                        onToggle={keepLearningSectionProps.onToggle}
                         width={keepLearningSectionProps.width}
                         topPosition={keepLearningSectionProps.topPosition as unknown as number}
                         height={keepLearningSectionProps.height as unknown as number}
@@ -2789,7 +2643,7 @@ const Learn: React.FC = () => {
             </View>
 
             {/* Top Controls - Now with opacity animation */}
-            <Animated.View style={{ opacity: uiElementsOpacity }}>
+            <Animated.View style={{ opacity: 0 }}>
                 <TopControls
                     onInstructionsOpen={() => setShowInstructions(true)}
                     onSettingsOpen={() => setShowSettings(true)}
@@ -2839,7 +2693,7 @@ const Learn: React.FC = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#181818',
+        backgroundColor: '#181818', // Change back to original dark grey
     },
     gestureContainer: {
         flex: 1,
@@ -2866,9 +2720,9 @@ const styles = StyleSheet.create({
     },
     videoContainer: {
         width: '100%',
-        backgroundColor: '#181818',
+        backgroundColor: '#181818', // Change back to original color
         position: 'relative',
-        borderRadius: 12,
+        borderRadius: 0,
         overflow: 'hidden',
     },
     skeletonContainer: {
@@ -2880,7 +2734,7 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     skeletonBox: {
-        backgroundColor: '#181818',
+        backgroundColor: '#181818', // Change back to original color
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -2898,11 +2752,11 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.5,
         shadowRadius: 10,
         elevation: 10,
-        backgroundColor: '#181818',
+        backgroundColor: '#181818', // Change back to original color
     },
     captionOverlay: {
         position: 'absolute',
-        bottom: 40,
+        bottom: 30, // Moved down from 40 to 30
         left: 0,
         right: 0,
         alignItems: 'center',
@@ -2913,12 +2767,9 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontWeight: 'bold',
         textAlign: 'center',
-        textShadowColor: '#000',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 3,
-    },
-    translatedCaptionText: {
-        color: '#e15190', // Pink color for translated captions
+        // Removed text shadow properties
+        paddingHorizontal: 12,
+        paddingVertical: 3, // Reduced from 6 to 3
     },
     sliderBlurContainer: {
         marginHorizontal: 20,
@@ -2990,11 +2841,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.1)',
     },
     containerHeader: {
-        height: COLLAPSED_HEIGHT,
-        justifyContent: 'center',
-        borderTopLeftRadius: 16,
-        borderTopRightRadius: 16,
-        backgroundColor: 'rgba(30, 30, 30, 0.8)', // Dark background instead of colored background
+        paddingHorizontal: 20,
+        paddingBottom: 15,
+        width: '100%',
     },
     headerTouchable: {
         width: '100%',
@@ -3004,18 +2853,14 @@ const styles = StyleSheet.create({
     headerContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 16,
     },
     headerIcon: {
-        marginRight: 12,
+        marginRight: 10,
     },
     lessonsHeaderText: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: 'bold',
-        color: '#fff',
-        textShadowColor: 'rgba(0, 0, 0, 0.3)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 2,
+        color: '#FFFFFF',
     },
     tapContainer: {
         backgroundColor: 'rgba(90, 81, 225, 0.2)',
@@ -3037,6 +2882,7 @@ const styles = StyleSheet.create({
     },
     scrollArea: {
         flex: 1,
+        marginTop: 0, // Remove top margin since we're removing the header
     },
     tabControlsContainer: {
         flexDirection: 'row',
@@ -3208,10 +3054,11 @@ const styles = StyleSheet.create({
     },
     controlsContainer: {
         position: 'absolute',
-        bottom: 0,
-        left: 8,
-        right: 8,
-        paddingBottom: 8,
+        top: 250, // Hard-coded value instead of calculated value
+        left: 20, // Match left edge with Keep Learning section
+        right: 20, // Match right edge with Keep Learning section
+        paddingHorizontal: 0, // No padding needed since container is already aligned
+        height: 44, // Hard-coded height
     },
     controlsBlur: {
         borderRadius: 12,
@@ -3248,14 +3095,17 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     highlightedPhrase: {
-        backgroundColor: 'rgba(255, 255, 0, 0.5)',
-        color: '#FFFFFF',
-        fontWeight: '800',
-        textShadowColor: '#000',
-        textShadowOffset: { width: 1, height: 1 },
-        textShadowRadius: 3,
+        backgroundColor: 'transparent', // No background color
+        color: '#FFFFFF', // White text
+        fontWeight: '700', // Bold text for emphasis
         padding: 2,
-        borderRadius: 4,
+        borderRadius: 0, // No border radius needed
+        textDecorationLine: 'underline', // Add underline
+        textDecorationColor: 'rgb(255, 255, 0)', // Yellow underline
+        textDecorationStyle: 'solid',
+        // Remove textDecorationThickness as it might not be supported
+        borderBottomWidth: 2, // Alternative way to create thicker underline
+        borderBottomColor: 'rgb(255, 255, 0)', // Yellow border
     },
     videoTouchable: {
         width: '100%',
@@ -3278,22 +3128,41 @@ const styles = StyleSheet.create({
     },
     seekButtonsContainer: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
+        justifyContent: 'space-between', // Space buttons to opposite edges
         alignItems: 'center',
         width: '100%',
-        height: 40, // Match the height of the translate button
-        gap: 8, // Add gap between the two seek buttons
+        height: 44, // Hard-coded height
+        gap: 2, // Reduce gap to just 2px for a more connected look
     },
     seekButton: {
-        flex: 1, // Make buttons fill available space equally
-        backgroundColor: 'rgba(255,255,255,0.1)',
-        borderRadius: 8,
-        height: '100%', // Make buttons full height
+        flex: 0.495, // Increase to make buttons even wider
+        backgroundColor: '#181818', // Match the main background color
+        borderRadius: 16, // Round corners
+        height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3, // For Android
+        overflow: 'hidden', // Important for content overflow
+        position: 'relative',
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)', // Light border like in profile.tsx
+    },
+    seekButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6, // Increase gap between icon and text
+        position: 'relative',
+        zIndex: 2, // Ensure content stays above the background
+        width: '100%',
+        paddingHorizontal: 16,
     },
     seekButtonText: {
-        color: '#888888',
+        color: '#AAAAAA', // Slightly lighter text for better contrast
         fontSize: 14,
         fontWeight: '600',
     },
@@ -3307,6 +3176,99 @@ const styles = StyleSheet.create({
         fontSize: 22,
         color: '#FFFFFF',
         fontWeight: '600',
+    },
+    keepLearningContainer: {
+        position: 'absolute',
+        left: 20,
+        right: 20,
+        zIndex: 3,
+        borderRadius: 16,
+        overflow: 'hidden',
+        backgroundColor: '#181818', // Match the main background color
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)', // Light border like in profile.tsx
+    },
+    headerBorder: {
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: 'rgba(255, 255, 255, 0.5)',
+        marginBottom: 10,
+        marginHorizontal: 20,
+        marginTop: 20,
+    },
+    translateButtonCorner: {
+        position: 'absolute',
+        bottom: 8,
+        left: 8,
+        width: 40,
+        height: 40,
+        backgroundColor: 'rgba(0,0,0,0.5)', // Slightly more opaque for better contrast without blur
+        borderRadius: 8,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.1)', // Add subtle border
+    },
+    
+    
+    captionWrapper: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        alignSelf: 'center',
+        backgroundColor: '#5a51e1', // Purple pill background
+        borderRadius: 16, // Reduced from 20 to 16
+        paddingVertical: 4, // Reduced from 6 to 4
+        paddingHorizontal: 8,
+        maxWidth: '90%',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4,
+        elevation: 5, // For Android
+    },
+    sectionHeader: {
+        paddingHorizontal: 20,
+        paddingTop: 10, // Reduced from 16 to 10
+        paddingBottom: 12, // Reduced from 15 to 12
+        width: '100%',
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255,255,255,0.1)',
+    },
+    sectionHeaderText: {
+        fontSize: 20, // Reduced from 22 to 20
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        marginBottom: 6, // Reduced from 8 to 6
+    },
+    headerIndicator: {
+        height: 3, // Reduced from 4 to 3
+        width: 36, // Reduced from 40 to 36
+        borderRadius: 1.5, // Adjusted for the new height
+        marginTop: 6, // Reduced from 8 to 6
+    },
+    contentPage: {
+        width: '100%', // This will be overridden by the inline width prop
+        paddingHorizontal: 16,
+        paddingTop: 16, // Add top padding for the heading in each view
+        paddingBottom: 20,
+        flexShrink: 0, // Prevent the view from shrinking
+    },
+    dotIndicatorContainer: {
+        position: 'absolute',
+        bottom: 15, // Increased from 10 to 15 for better spacing with the blurred pill
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 5, // Add zIndex to ensure it appears above other content
+        pointerEvents: 'none', // Allow touches to pass through to content underneath
     },
 });
 

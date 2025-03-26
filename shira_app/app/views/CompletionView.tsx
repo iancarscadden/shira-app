@@ -1,14 +1,27 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ActivityIndicator, 
+  Animated, 
+  Easing,
+  Dimensions
+} from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 // @ts-ignore
 import UpArrow from '../components/up_arrow.svg';
 import { incrementXP, incrementDailyVideosWatched } from '../../supabase/progressService';
 import useUser from '../../hooks/useUser';
-import DotIndicator from '../components/DotIndicator';
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
 
 // XP level constants
 const XP_PER_LEVEL = 500;
+const XP_EARNED = 100;
+
+const { width } = Dimensions.get('window');
 
 interface CompletionViewProps {
   isVisible: boolean;
@@ -22,6 +35,22 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
   const [dailyGoal, setDailyGoal] = useState<number>(5);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [hasUpdated, setHasUpdated] = useState<boolean>(false);
+  
+  // Animation values
+  const fadeIn = useRef(new Animated.Value(0)).current;
+  const slideUp = useRef(new Animated.Value(30)).current;
+  const xpProgress = useRef(new Animated.Value(0)).current;
+  const dailyProgress = useRef(new Animated.Value(0)).current;
+  const arrowAnim = useRef(new Animated.Value(0)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+  
+  // Star burst animation
+  const starBurst = useRef(Array(8).fill(0).map(() => ({
+    rotate: new Animated.Value(0),
+    scale: new Animated.Value(0),
+    opacity: new Animated.Value(0)
+  }))).current;
 
   // Fetch initial user data
   useEffect(() => {
@@ -32,7 +61,6 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
       }
 
       try {
-        // Just use default daily goal of 5
         setCurrentXP(user.xp_level || 0);
         setDailyVideosWatched(user.daily_videos_watched || 0);
         setIsLoading(false);
@@ -54,7 +82,7 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
 
       try {
         // Increment XP by 100 points
-        const updatedXP = await incrementXP(user.id, 100);
+        const updatedXP = await incrementXP(user.id, XP_EARNED);
         setNewXP(updatedXP);
         
         // Increment daily videos watched
@@ -63,6 +91,12 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
         
         console.log('Progress updated: XP:', updatedXP, 'Daily Videos:', updatedCount);
         setHasUpdated(true);
+        
+        // Trigger haptic feedback for celebration
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        // Start celebration animations
+        startAnimations(updatedXP, updatedCount);
       } catch (error) {
         console.error('Error updating user progress:', error);
       }
@@ -70,21 +104,202 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
 
     updateProgress();
   }, [user, isVisible, hasUpdated, isLoading]);
+  
+  // Start animations when the screen becomes visible
+  useEffect(() => {
+    if (isVisible && !isLoading) {
+      // If we already updated, animate with the values we have
+      if (hasUpdated) {
+        startAnimations(newXP, dailyVideosWatched);
+      }
+      // If we have reset the hasUpdated flag, start with non-animated state
+      else if (currentXP > 0) {
+        fadeIn.setValue(1);
+        slideUp.setValue(0);
+        scaleAnim.setValue(1);
+        
+        // Calculate initial progress values
+        const levelXP = currentXP % XP_PER_LEVEL;
+        xpProgress.setValue(levelXP / XP_PER_LEVEL);
+        dailyProgress.setValue(Math.min(dailyVideosWatched / dailyGoal, 1));
+        
+        // Start only the arrow animation
+        startArrowAnimation();
+      }
+    } else {
+      // Reset animations when screen is not visible
+      resetAnimations();
+    }
+  }, [isVisible, isLoading, hasUpdated]);
+  
+  // Function to start all animations
+  const startAnimations = (updatedXP: number, updatedCount: number) => {
+    // Reset animations first
+    resetAnimations();
+    
+    // Calculate the progress values
+    const oldLevelXP = currentXP % XP_PER_LEVEL;
+    const oldXPProgress = oldLevelXP / XP_PER_LEVEL;
+    
+    const newLevelXP = updatedXP % XP_PER_LEVEL;
+    const newXPProgress = newLevelXP / XP_PER_LEVEL;
+    
+    // For daily goal, ensure it's at most 100%
+    const oldDailyProgress = Math.min((updatedCount - 1) / dailyGoal, 1);
+    const newDailyProgress = Math.min(updatedCount / dailyGoal, 1);
+    
+    // Set initial values
+    fadeIn.setValue(0);
+    slideUp.setValue(30);
+    xpProgress.setValue(oldXPProgress);
+    dailyProgress.setValue(oldDailyProgress);
+    scaleAnim.setValue(0.9);
+    
+    // Start fade, slide and scale animations
+    Animated.parallel([
+      Animated.timing(fadeIn, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic)
+      }),
+      Animated.timing(slideUp, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.back(1.5))
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+        easing: Easing.elastic(1.1)
+      })
+    ]).start();
+    
+    // Spin animation for trophy
+    Animated.timing(spinAnim, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+      easing: Easing.out(Easing.cubic)
+    }).start();
+    
+    // Set progress values directly without animation
+    xpProgress.setValue(newXPProgress);
+    dailyProgress.setValue(newDailyProgress);
+    
+    // Start star burst
+    animateStarBurst();
+    
+    // Start arrow animation
+    startArrowAnimation();
+  };
+  
+  // Function to animate star burst
+  const animateStarBurst = () => {
+    starBurst.forEach((star, i) => {
+      // Calculate degree based on index
+      const degree = (i / starBurst.length) * 360;
+      
+      Animated.sequence([
+        Animated.delay(i * 50),
+        Animated.parallel([
+          Animated.timing(star.rotate, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(star.scale, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.back(1.5))
+          }),
+          Animated.timing(star.opacity, {
+            toValue: 1,
+            duration: 400,
+            useNativeDriver: true,
+          })
+        ]),
+        Animated.delay(400),
+        Animated.timing(star.opacity, {
+          toValue: 0,
+          duration: 600,
+          useNativeDriver: true,
+        })
+      ]).start();
+    });
+  };
+  
+  // Function to start the arrow animation
+  const startArrowAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(arrowAnim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.cubic)
+        }),
+        Animated.timing(arrowAnim, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.cubic)
+        })
+      ])
+    ).start();
+  };
+  
+  // Function to reset all animations
+  const resetAnimations = () => {
+    fadeIn.setValue(0);
+    slideUp.setValue(30);
+    xpProgress.setValue(0);
+    dailyProgress.setValue(0);
+    arrowAnim.setValue(0);
+    spinAnim.setValue(0);
+    scaleAnim.setValue(0.9);
+    
+    // Stop any ongoing animations
+    fadeIn.stopAnimation();
+    slideUp.stopAnimation();
+    xpProgress.stopAnimation();
+    dailyProgress.stopAnimation();
+    arrowAnim.stopAnimation();
+    spinAnim.stopAnimation();
+    scaleAnim.stopAnimation();
+    
+    // Reset star burst
+    starBurst.forEach(star => {
+      star.rotate.stopAnimation();
+      star.scale.stopAnimation();
+      star.opacity.stopAnimation();
+      
+      star.rotate.setValue(0);
+      star.scale.setValue(0);
+      star.opacity.setValue(0);
+    });
+  };
 
   // Calculate level from XP
   const calculateLevel = (xp: number): number => {
     return Math.floor(xp / XP_PER_LEVEL) + 1;
   };
 
-  // Calculate XP progress within current level (0-1)
-  const calculateXPProgress = (xp: number): number => {
-    const levelXP = xp % XP_PER_LEVEL;
-    return levelXP / XP_PER_LEVEL;
-  };
-
   const level = calculateLevel(newXP > 0 ? newXP : currentXP);
-  const xpProgress = calculateXPProgress(newXP > 0 ? newXP : currentXP);
-  const dailyProgress = dailyVideosWatched / dailyGoal;
+
+  // Calculate XP progress percent for current level (e.g., 100 XP = 20% of 500)
+  const currentLevelXP = newXP > 0 
+    ? newXP % XP_PER_LEVEL  // Get remainder for new XP 
+    : currentXP % XP_PER_LEVEL; // Get remainder for current XP
+
+  // Convert to percentage
+  const xpProgressPercent = (currentLevelXP / XP_PER_LEVEL) * 100;
+
+  // For daily goal - ensure it shows 100% when goal is met or exceeded
+  const dailyProgressPercent = dailyVideosWatched >= dailyGoal ? 100 : (dailyVideosWatched / dailyGoal) * 100;
 
   if (isLoading) {
     return (
@@ -94,59 +309,266 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
     );
   }
 
+  // Interpolate arrow translation
+  const arrowTranslateY = arrowAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 10]
+  });
+  
+  // Spin interpolation
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg']
+  });
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Good Job!</Text>
-      <Text style={styles.subtitle}>You completed the video and earned 100 XP</Text>
-      
-      {/* XP Progress Bar */}
-      <View style={styles.progressSection}>
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>Level {level}</Text>
-          <Text style={styles.xpValue}>{newXP > 0 ? newXP % XP_PER_LEVEL : currentXP % XP_PER_LEVEL}/{XP_PER_LEVEL} XP</Text>
+      {/* Trophy and celebration */}
+      <Animated.View
+        style={[
+          styles.trophyContainer,
+          {
+            opacity: fadeIn,
+            transform: [
+              { translateY: slideUp },
+              { scale: scaleAnim },
+              { rotate: spin }
+            ]
+          }
+        ]}
+      >
+        {/* Star burst rays */}
+        {starBurst.map((star, i) => {
+          const degree = (i / starBurst.length) * 360;
+          return (
+            <Animated.View
+              key={`star-${i}`}
+              style={[
+                styles.starRay,
+                {
+                  opacity: star.opacity,
+                  transform: [
+                    { rotate: `${degree}deg` },
+                    { translateY: -40 },
+                    { scaleY: star.scale }
+                  ]
+                }
+              ]}
+            />
+          );
+        })}
+        
+        <View style={styles.trophyCircle}>
+          <Ionicons name="trophy" size={32} color="#FFF" />
         </View>
-        <View style={styles.progressBarContainer}>
-          <LinearGradient
-            colors={['#5a51e1', '#8a72e3']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.progressBar, { width: `${xpProgress * 100}%` }]}
-          >
-            {xpProgress > 0.08 && (
-              <Text style={styles.progressText}>+100</Text>
-            )}
-          </LinearGradient>
-        </View>
-      </View>
+      </Animated.View>
       
-      {/* Daily Goal Progress */}
-      <View style={styles.progressSection}>
-        <View style={styles.labelRow}>
-          <Text style={styles.label}>Daily Goal</Text>
-          <Text style={styles.xpValue}>{dailyVideosWatched}/{dailyGoal} videos</Text>
-        </View>
-        <View style={styles.progressBarContainer}>
-          <LinearGradient
-            colors={['#e15190', '#e17051']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.progressBar, { width: `${Math.min(dailyProgress, 1) * 100}%` }]}
-          >
-            {dailyProgress > 0.08 && (
-              <Text style={styles.progressText}>+1</Text>
-            )}
-          </LinearGradient>
-        </View>
-      </View>
+      {/* Congratulation message - made more concise */}
+      <Animated.View
+        style={[
+          styles.messageContainer,
+          {
+            opacity: fadeIn,
+            transform: [
+              { translateY: slideUp },
+              { scale: scaleAnim }
+            ]
+          }
+        ]}
+      >
+        <Text style={styles.congratsText}>Video Complete!</Text>
+        <Text style={styles.subtitle}>+{XP_EARNED} XP</Text>
+      </Animated.View>
       
-      {/* Swipe up indicator */}
-      <View style={styles.swipeUpContainer}>
-        <Text style={styles.swipeUpText}>Swipe up to continue</Text>
-        <UpArrow width={24} height={24} fill="#FFFFFF" />
-      </View>
+      {/* Progress circles - Simplified */}
+      <Animated.View
+        style={[
+          styles.circlesContainer,
+          {
+            opacity: fadeIn,
+            transform: [
+              { translateY: slideUp },
+              { scale: scaleAnim }
+            ]
+          }
+        ]}
+      >
+        <View style={styles.circlesRow}>
+          {/* XP Progress - Using SVG arc similar to progress.tsx */}
+          <View style={styles.progressCircleContainer}>
+            <View style={styles.progressLabelTop}>
+              <View style={styles.levelBadge}>
+                <Text style={styles.levelText}>{level}</Text>
+              </View>
+              <Text style={styles.levelLabel}>Level</Text>
+            </View>
+            
+            <View style={styles.circleWrapper}>
+              <Svg width={90} height={90} viewBox="0 0 100 100">
+                <Defs>
+                  <SvgGradient id="xpGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <Stop offset="0%" stopColor="#5a51e1" />
+                    <Stop offset="100%" stopColor="#8a72e3" />
+                  </SvgGradient>
+                </Defs>
+                {/* Background circle */}
+                <Path
+                  d="M 50 5 A 45 45 0 0 1 95 50 A 45 45 0 0 1 50 95 A 45 45 0 0 1 5 50 A 45 45 0 0 1 50 5"
+                  fill="none"
+                  stroke="rgba(255, 255, 255, 0.1)"
+                  strokeWidth={8}
+                />
+                {/* Progress arc */}
+                {(() => {
+                  // Ensure we have a valid percentage between 0-100
+                  const progress = Math.min(Math.max(xpProgressPercent, 0), 100);
+                  
+                  // When progress is exactly 0%, don't render the arc
+                  if (progress === 0) return null;
+                  
+                  // Determine if we passed the halfway point
+                  const isHalfOrMore = progress > 50;
+                  
+                  // Calculate the end point of the arc
+                  const endX = 50 + 45 * Math.cos((Math.PI * 2 * progress) / 100 - Math.PI / 2);
+                  const endY = 50 + 45 * Math.sin((Math.PI * 2 * progress) / 100 - Math.PI / 2);
+                  
+                  return (
+                    <Path
+                      d={`M 50 5 A 45 45 0 ${isHalfOrMore ? 1 : 0} 1 ${endX} ${endY}`}
+                      fill="none"
+                      stroke="url(#xpGradient)"
+                      strokeWidth={8}
+                      strokeLinecap="round"
+                    />
+                  );
+                })()}
+              </Svg>
+              
+              <View style={styles.progressCenter}>
+                <Text style={styles.progressCenterValue}>
+                  +{XP_EARNED}
+                </Text>
+              </View>
+            </View>
+          </View>
+          
+          {/* Daily Goal Progress - Using SVG arc similar to progress.tsx */}
+          <View style={styles.progressCircleContainer}>
+            <View style={styles.progressLabelTop}>
+              <Text style={styles.dailyGoalTitle}>Daily Goal</Text>
+            </View>
+            
+            <View style={styles.circleWrapper}>
+              <Svg width={90} height={90} viewBox="0 0 100 100">
+                <Defs>
+                  <SvgGradient id="dailyGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                    <Stop offset="0%" stopColor="#e15190" />
+                    <Stop offset="100%" stopColor="#e17051" />
+                  </SvgGradient>
+                </Defs>
+                {/* Background circle */}
+                <Path
+                  d="M 50 5 A 45 45 0 0 1 95 50 A 45 45 0 0 1 50 95 A 45 45 0 0 1 5 50 A 45 45 0 0 1 50 5"
+                  fill="none"
+                  stroke="rgba(255, 255, 255, 0.1)"
+                  strokeWidth={8}
+                />
+                {/* Progress arc - Special handling for 100% */}
+                {(() => {
+                  // Handle 100% case specially to draw complete circle
+                  if (dailyProgressPercent >= 100) {
+                    return (
+                      <Path
+                        d="M 50 5 A 45 45 0 1 1 49.999 5"
+                        fill="none"
+                        stroke="url(#dailyGradient)"
+                        strokeWidth={8}
+                        strokeLinecap="round"
+                      />
+                    );
+                  }
+                  
+                  // When progress is exactly 0%, don't render the arc
+                  if (dailyProgressPercent === 0) return null;
+                  
+                  // Determine if we passed the halfway point
+                  const isHalfOrMore = dailyProgressPercent > 50;
+                  
+                  // Calculate the end point of the arc
+                  const endX = 50 + 45 * Math.cos((Math.PI * 2 * dailyProgressPercent) / 100 - Math.PI / 2);
+                  const endY = 50 + 45 * Math.sin((Math.PI * 2 * dailyProgressPercent) / 100 - Math.PI / 2);
+                  
+                  return (
+                    <Path
+                      d={`M 50 5 A 45 45 0 ${isHalfOrMore ? 1 : 0} 1 ${endX} ${endY}`}
+                      fill="none"
+                      stroke="url(#dailyGradient)"
+                      strokeWidth={8}
+                      strokeLinecap="round"
+                    />
+                  );
+                })()}
+              </Svg>
+              
+              <View style={styles.progressCenter}>
+                <Text style={styles.progressCenterValue}>
+                  +1
+                </Text>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Animated.View>
       
-      {/* Dot indicator */}
-      <DotIndicator totalDots={4} activeDotIndex={3} />
+      {/* Next video indicator - Enhanced */}
+      <Animated.View 
+        style={[
+          styles.swipeUpContainer, 
+          {
+            opacity: fadeIn,
+            transform: [
+              { translateY: Animated.add(slideUp, arrowAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0, -5]
+              }))}
+            ]
+          }
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(90, 81, 225, 0.9)', 'rgba(90, 81, 225, 0.7)']}
+          style={styles.swipeUpGradient}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+        >
+          <View style={styles.swipeUpContent}>
+            <Text style={styles.swipeUpText}>Next video</Text>
+            
+            <View style={styles.chevronGroupContainer}>
+              <Animated.View 
+                style={[
+                  styles.chevronGroup,
+                  {
+                    transform: [
+                      { 
+                        translateY: arrowAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [0, -8]
+                        })
+                      }
+                    ]
+                  }
+                ]}
+              >
+                <Ionicons name="chevron-up" size={20} color="#FFFFFF" />
+                <Ionicons name="chevron-up" size={20} color="#FFFFFF" style={styles.stackedChevron} />
+                <Ionicons name="chevron-up" size={20} color="#FFFFFF" style={styles.stackedChevron} />
+              </Animated.View>
+            </View>
+          </View>
+        </LinearGradient>
+      </Animated.View>
     </View>
   );
 };
@@ -154,18 +576,55 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    width: '100%',
     backgroundColor: 'transparent',
-    padding: 12,
-    justifyContent: 'flex-start',
+    paddingHorizontal: 16,
+    paddingTop: 0,
+    paddingBottom: 10,
     alignItems: 'center',
+    justifyContent: 'flex-start',
   },
-  title: {
-    fontSize: 22,
+  trophyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    width: 80,
+    height: 80,
+    marginTop: 5,
+  },
+  starRay: {
+    position: 'absolute',
+    width: 3,
+    height: 16,
+    backgroundColor: '#FFD700',
+    borderRadius: 2,
+    left: '50%',
+    top: '50%',
+    marginLeft: -1.5,
+    marginTop: -1.5,
+  },
+  trophyCircle: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#5a51e1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#5a51e1',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  messageContainer: {
+    alignItems: 'center',
+    marginVertical: 5,
+  },
+  congratsText: {
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#fff',
-    textAlign: 'center',
-    marginBottom: 8,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 2,
@@ -174,59 +633,117 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#ddd',
     textAlign: 'center',
-    marginBottom: 20,
   },
-  progressSection: {
-    width: '90%',
-    marginBottom: 20,
-  },
-  labelRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  label: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#fff',
-  },
-  xpValue: {
-    fontSize: 14,
-    color: '#ddd',
-  },
-  progressBarContainer: {
+  circlesContainer: {
     width: '100%',
-    height: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    marginTop: 5,
   },
-  progressBar: {
-    height: '100%',
-    borderRadius: 8,
+  circlesRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'flex-start', // Align to top
+    width: '100%',
+  },
+  progressCircleContainer: {
+    alignItems: 'center',
+    width: 140,
+  },
+  progressLabelTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 5,
     justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 8,
+    height: 26, // Fixed height to ensure alignment
   },
-  progressText: {
+  levelBadge: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#5a51e1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 5,
+  },
+  levelText: {
     color: '#fff',
-    fontSize: 12,
     fontWeight: 'bold',
-    textShadowColor: 'rgba(0, 0, 0, 0.5)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 14,
+  },
+  levelLabel: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  dailyGoalTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  circleWrapper: {
+    width: 90,
+    height: 90,
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  progressCenter: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(24, 24, 24, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    zIndex: 2,
+    position: 'absolute',
+  },
+  progressCenterValue: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   swipeUpContainer: {
-    marginTop: 24,
     alignItems: 'center',
+    marginTop: 40,
+    marginBottom: 20,
+    width: '100%',
+  },
+  swipeUpGradient: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 30,
+    borderRadius: 25,
+    width: '70%',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    elevation: 3,
+  },
+  swipeUpContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
   },
   swipeUpText: {
     fontSize: 16,
-    color: '#ddd',
-    marginBottom: 8,
+    color: '#fff',
+    fontWeight: '600',
+    marginRight: 20,
+  },
+  chevronGroupContainer: {
+    height: 45,
+    width: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chevronGroup: {
+    alignItems: 'center',
+  },
+  stackedChevron: {
+    marginTop: -12,
   },
 });
 

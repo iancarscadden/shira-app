@@ -76,7 +76,6 @@ const validatePassword = (password: string): boolean => {
 const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
     const [loading, setLoading] = useState(false);
     const [showPaywall, setShowPaywall] = useState(false);
@@ -235,11 +234,6 @@ const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack })
             return;
         }
 
-        if (password !== confirmPassword) {
-            Alert.alert('Password Mismatch', 'Passwords do not match.');
-            return;
-        }
-
         try {
             setLoading(true);
             
@@ -255,9 +249,9 @@ const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack })
                     if (!user) {
                         Alert.alert('Registration Error', 'Failed to register user. Please try again.');
                         setLoading(false);
-                        return;
-                    }
-                    
+            return;
+        }
+
                     userId = user.id;
                 } catch (registerError) {
                     console.error('Registration error:', registerError);
@@ -414,6 +408,45 @@ const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack })
         router.replace('/(tabs)');
     };
 
+    const handleForgotPassword = async () => {
+        if (!email) {
+            Alert.alert('Email Required', 'Please enter your email address first.');
+            return;
+        }
+
+        if (!validateEmail(email)) {
+            Alert.alert('Invalid Email', 'Please enter a valid email address.');
+            return;
+        }
+
+        try {
+            setLoading(true);
+            
+            // Send password reset email using Supabase
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: 'shira://reset-password',
+            });
+
+            if (error) {
+                Alert.alert('Error', error.message);
+                setLoading(false);
+                return;
+            }
+
+            Alert.alert(
+                'Password Reset Email Sent',
+                'Please check your email for instructions to reset your password.',
+                [{ text: 'OK' }]
+            );
+            
+            setLoading(false);
+        } catch (error) {
+            console.error('Password reset error:', error);
+            Alert.alert('Error', 'Failed to send password reset email. Please try again.');
+            setLoading(false);
+        }
+    };
+
     // If showing paywall, render the PaywallScreen component
     if (showPaywall) {
         return <PaywallScreen />;
@@ -451,15 +484,15 @@ const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack })
 
                     <View style={styles.socialButtonsContainer}>
                         {appleSignInAvailable && (
-                            <TouchableOpacity 
-                                style={[styles.socialButton, styles.appleButton]} 
+                                <TouchableOpacity
+                                    style={[styles.socialButton, styles.appleButton]}
                                 onPress={() => handleSocialSignUp('apple')}
                                 disabled={loading}
-                            >
+                                >
                                 <SvgXml xml={appleSvg} width={24} height={24} />
                                 <Text style={styles.socialButtonText}>Continue with Apple</Text>
-                            </TouchableOpacity>
-                        )}
+                                </TouchableOpacity>
+                            )}
                         
                         <TouchableOpacity 
                             style={[styles.socialButton, styles.googleButton]} 
@@ -468,7 +501,7 @@ const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack })
                         >
                             <SvgXml xml={googleSvg} width={24} height={24} />
                             <Text style={[styles.socialButtonText, styles.googleButtonText]}>Continue with Google</Text>
-                        </TouchableOpacity>
+                            </TouchableOpacity>
                     </View>
 
                     <View style={styles.orContainer}>
@@ -535,28 +568,12 @@ const OnboardingStep6: React.FC<OnboardingStep6Props> = ({ onContinue, onBack })
                                     />
                                 </TouchableOpacity>
                             </View>
-                        </Animated.View>
-
-                        <Animated.View 
-                            style={{ 
-                                opacity: fadeAnim, 
-                                transform: [{ translateY: inputSlideAnim2 }],
-                                width: '100%'
-                            }}
-                        >
-                            <View style={styles.inputWrapper}>
-                                <Ionicons name="lock-closed-outline" size={20} color={colors.subText} style={styles.inputIcon} />
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Confirm password"
-                                    placeholderTextColor={colors.subText}
-                                    secureTextEntry
-                                    value={confirmPassword}
-                                    onChangeText={setConfirmPassword}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            </View>
+                            <TouchableOpacity 
+                                onPress={handleForgotPassword}
+                                style={styles.forgotPasswordContainer}
+                            >
+                                <Text style={styles.forgotPasswordText}>Forgot password?</Text>
+                            </TouchableOpacity>
                         </Animated.View>
 
                         <View style={styles.continueButtonContainer}>
@@ -725,6 +742,17 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(255, 255, 255, 0.08)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    forgotPasswordContainer: {
+        alignSelf: 'flex-end',
+        marginTop: 8,
+        marginBottom: 16,
+        paddingHorizontal: 8,
+    },
+    forgotPasswordText: {
+        color: colors.subText,
+        fontSize: 14,
+        textDecorationLine: 'underline',
     },
 });
 

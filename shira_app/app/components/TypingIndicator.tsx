@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Text } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 
 interface TypingIndicatorProps {
     isTyping: boolean;
@@ -36,15 +37,49 @@ const TypingIndicator: React.FC<TypingIndicatorProps> = ({ isTyping, isUser }) =
 
     if (!isTyping) return null;
 
+    // Different rendering based on whether it's user or system typing
+    if (isUser) {
+        return (
+            <LinearGradient
+                colors={['#5a51e1', '#e15190']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[
+                    styles.messageBubble,
+                    styles.userBubble,
+                ]}
+            >
+                <View style={styles.container}>
+                    {[0, 1, 2].map((dotIndex) => (
+                        <Animated.View
+                            key={dotIndex}
+                            style={[
+                                styles.dot,
+                                {
+                                    opacity: fadeAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.3, 1],
+                                        extrapolate: 'clamp',
+                                    })
+                                }
+                            ]}
+                        />
+                    ))}
+                </View>
+            </LinearGradient>
+        );
+    }
+
+    // System typing indicator
     return (
         <View style={[
             styles.messageBubble,
-            isUser ? styles.userBubble : styles.systemBubble
+            styles.systemBubble
         ]}>
             <View style={styles.container}>
-                {[0, 1, 2].map((_, index) => (
+                {[0, 1, 2].map((dotIndex) => (
                     <Animated.View
-                        key={index}
+                        key={dotIndex}
                         style={[
                             styles.dot,
                             {
@@ -66,16 +101,27 @@ const styles = StyleSheet.create({
     messageBubble: {
         maxWidth: '80%',
         padding: 12,
-        borderRadius: 16,
+        borderRadius: 18, // Increased to match message bubbles
         marginVertical: 4,
     },
     userBubble: {
-        backgroundColor: '#5A51E1',
         alignSelf: 'flex-end',
+        shadowColor: '#5a51e1',
+        shadowOffset: {
+            width: 0,
+            height: 0,
+        },
+        shadowOpacity: 0.5,
+        shadowRadius: 8,
+        elevation: 5,
+        borderWidth: 0.5,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        marginLeft: 'auto', // Ensure right alignment
     },
     systemBubble: {
-        backgroundColor: 'rgba(255,255,255,0.1)',
+        backgroundColor: '#3b3b3d', // Updated to match system message
         alignSelf: 'flex-start',
+        marginRight: 'auto', // Ensure left alignment
     },
     container: {
         flexDirection: 'row',

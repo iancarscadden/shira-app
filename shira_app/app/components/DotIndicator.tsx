@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { BlurView } from 'expo-blur';
 
 interface DotIndicatorProps {
   totalDots: number;
@@ -9,15 +10,19 @@ interface DotIndicatorProps {
 const DotIndicator: React.FC<DotIndicatorProps> = ({ totalDots, activeDotIndex }) => {
   return (
     <View style={styles.container}>
-      {Array.from({ length: totalDots }).map((_, index) => (
-        <View 
-          key={index} 
-          style={[
-            styles.dot, 
-            index === activeDotIndex ? styles.activeDot : styles.inactiveDot
-          ]} 
-        />
-      ))}
+      <BlurView intensity={25} tint="dark" style={styles.blurPill}>
+        <View style={styles.dotContainer}>
+          {Array.from({ length: totalDots }).map((_, index) => (
+            <View 
+              key={index} 
+              style={[
+                styles.dot, 
+                index === activeDotIndex ? styles.activeDot : styles.inactiveDot
+              ]} 
+            />
+          ))}
+        </View>
+      </BlurView>
     </View>
   );
 };
@@ -27,9 +32,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    position: 'absolute',
-    bottom: 20,
     width: '100%',
+  },
+  blurPill: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(24, 24, 24, 0.5)', // Slightly visible background that matches #181818
+  },
+  dotContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
     gap: 8,
   },
   dot: {
