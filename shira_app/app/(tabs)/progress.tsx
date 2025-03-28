@@ -2,7 +2,7 @@
 // or if your route is named Learn, keep the file name as is.
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Animated, NativeSyntheticEvent, NativeScrollEvent, StatusBar, Dimensions, Platform, RefreshControl, ToastAndroid } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, Animated, NativeSyntheticEvent, NativeScrollEvent, StatusBar, Dimensions, Platform, RefreshControl, ToastAndroid, Easing, Alert } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop, Rect } from 'react-native-svg';
 import { colors } from '../onboarding/styles';
@@ -71,6 +71,81 @@ const Progress: React.FC = () => {
     const refreshMessageAnim = useRef(new Animated.Value(0)).current;
     const iconGlowAnim = useRef(new Animated.Value(0.4)).current;
 
+    // Add this to track loading state
+    const [isLoadingUserData, setIsLoadingUserData] = useState(true);
+    
+    // Shimmer animation for skeletons
+    const shimmerAnim = useRef(new Animated.Value(0)).current;
+    
+    // Animate the shimmer effect for skeleton loaders
+    useEffect(() => {
+        if (isLoadingUserData) {
+            // Create a looping shimmer animation
+            Animated.loop(
+                Animated.timing(shimmerAnim, {
+                    toValue: 1,
+                    duration: 1200,
+                    useNativeDriver: true,
+                    easing: Easing.ease
+                })
+            ).start();
+        } else {
+            // Reset animation when loading is complete
+            shimmerAnim.setValue(0);
+        }
+    }, [isLoadingUserData]);
+    
+    // Create interpolated values for shimmer effect
+    const shimmerTranslateX = shimmerAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-200, 200]
+    });
+
+    // Updated with better colors:
+    const renderNameSkeleton = () => {
+        return (
+            <View style={styles.nameSkeleton}>
+                <Animated.View 
+                    style={[
+                        styles.shimmerContainer,
+                        {
+                            transform: [{ translateX: shimmerTranslateX }]
+                        }
+                    ]}
+                >
+                    <LinearGradient
+                        colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.shimmerGradient}
+                    />
+                </Animated.View>
+            </View>
+        );
+    };
+    
+    const renderAvatarSkeleton = () => {
+        return (
+            <View style={styles.avatarSkeleton}>
+                <Animated.View 
+                    style={[
+                        styles.shimmerContainer,
+                        {
+                            transform: [{ translateX: shimmerTranslateX }]
+                        }
+                    ]}
+                >
+                    <LinearGradient
+                        colors={['rgba(106, 95, 242, 0)', 'rgba(138, 114, 227, 0.25)', 'rgba(106, 95, 242, 0)']}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                        style={styles.shimmerGradient}
+                    />
+                </Animated.View>
+            </View>
+        );
+    };
+
     // Calculate header text size based on scroll position
     const headerTextSize = scrollY.interpolate({
         inputRange: [-100, 0],
@@ -96,11 +171,13 @@ const Progress: React.FC = () => {
     // to ensure this function doesn't change between renders
     const fetchUserData = useCallback(async () => {
         console.log('Fetching fresh user data from database...');
+        setIsLoadingUserData(true); // Set loading to true when fetching starts
         try {
             // Get user session
             const { data: { session } } = await supabase.auth.getSession();
             if (!session?.user?.id) {
                 console.log('No active user session found');
+                setIsLoadingUserData(false); // Set loading to false even if no session
                 return;
             }
             
@@ -115,6 +192,7 @@ const Progress: React.FC = () => {
             
             if (profileError) {
                 console.error('Error fetching profile data:', profileError);
+                setIsLoadingUserData(false); // Set loading to false on error
                 return;
             }
             
@@ -152,6 +230,8 @@ const Progress: React.FC = () => {
         } catch (error) {
             console.error('Error fetching user data:', error);
             throw error; // Rethrow to handle in the onRefresh function
+        } finally {
+            setIsLoadingUserData(false); // Always set loading to false when done
         }
     }, []);
 
@@ -248,8 +328,13 @@ const Progress: React.FC = () => {
     };
 
     const handleDiscoveredPhrases = () => {
-        // This is just a placeholder - no functionality for now
-        console.log('Discovered phrases button pressed');
+        Alert.alert(
+            "Coming soon!",
+            "This is where you will be able to speak with Shira AI, starting the conversation from your discovered key phrases.",
+            [
+                { text: "OK", onPress: () => console.log("Alert closed") }
+            ]
+        );
     };
 
     // Calculate progress percentage for daily goal
@@ -306,14 +391,17 @@ const Progress: React.FC = () => {
                     <View style={styles.avatarContainer}>
                         <View style={styles.avatar}>
                             <Text style={styles.avatarText}>
-                                {displayName ? displayName.charAt(0).toUpperCase() : '?'}
+                                {isLoadingUserData ? '' : (displayName ? displayName.charAt(0).toUpperCase() : '?')}
                             </Text>
+                            {isLoadingUserData && renderAvatarSkeleton()}
                         </View>
                         <View style={styles.avatarGlow} />
                     </View>
                     <View style={styles.userTextContainer}>
                         <Text style={styles.welcomeText}>Welcome back,</Text>
-                        <Text style={styles.nameText}>{displayName}</Text>
+                        {isLoadingUserData ? renderNameSkeleton() : (
+                            <Text style={styles.nameText}>{displayName}</Text>
+                        )}
                         <View style={styles.levelBadgeSmall}>
                             <MaterialCommunityIcons name="star-four-points" size={12} color="#000" />
                             <Text style={styles.levelBadgeTextSmall}>LEVEL {level}</Text>
@@ -490,8 +578,15 @@ const Progress: React.FC = () => {
                         end={{ x: 1, y: 1 }}
                         style={{flex: 1}}
                     >
-                        <View style={[styles.cardHeader, styles.conversationHeader]}>
-                            <Text style={styles.cardTitle}>PRACTICE SPEAKING</Text>
+                        <View style={[styles.cardHeader, styles.conversationHeader, styles.practiceHeaderRow]}>
+                            <View style={styles.headerTitleGroup}>
+                                <Text style={styles.cardTitle}>PRACTICE</Text>
+                                <View style={styles.shiraAiGradientContainer}>
+                                    <Text style={styles.shiraAiText}>SHIRA AI</Text>
+                                    <Ionicons name="flash-outline" size={12} color="#FFFFFF" style={styles.starIcon} />
+                                </View>
+                            </View>
+                            <View style={styles.headerSpacer}></View>
                         </View>
                         <View style={styles.cardContent}>
                             <TouchableOpacity style={styles.settingItem} onPress={handleDiscoveredPhrases}>
@@ -504,11 +599,11 @@ const Progress: React.FC = () => {
                                 <View style={styles.settingTextContainer}>
                                     <Text style={styles.conversationTitle}>Have a Conversation</Text>
                                     <Text style={styles.settingDescription}>
-                                        Practice your speaking skills with {totalPhrasesCount} discovered phrases
+                                        Practice speaking from your discovered phrases
                                     </Text>
                                 </View>
                                 <View style={styles.phraseCountBadge}>
-                                    <Text style={styles.phraseCountText}>{totalPhrasesCount}</Text>
+                                    <Text style={styles.phraseCountText}>1</Text>
                                 </View>
                             </TouchableOpacity>
                         </View>
@@ -1138,6 +1233,73 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         fontSize: 14,
         fontWeight: '500',
+    },
+    practiceHeaderRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    headerTitleGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    headerSpacer: {
+        width: 20, // This creates space on the right to balance the layout
+    },
+    shiraAiGradientContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 8,
+        marginLeft: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    },
+    shiraAiText: {
+        fontSize: 12,
+        fontWeight: '700',
+        color: '#FFFFFF',
+        letterSpacing: 0.5,
+    },
+    starIcon: {
+        marginLeft: 3,
+        marginRight: -2,
+    },
+    avatarSkeleton: {
+        position: 'absolute',
+        width: 70,
+        height: 70,
+        borderRadius: 35,
+        backgroundColor: 'rgba(106, 95, 242, 0.1)',
+        top: 0,
+        left: 0,
+        overflow: 'hidden',
+    },
+    nameSkeleton: {
+        width: 180,
+        height: 30,
+        borderRadius: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.07)',
+        marginBottom: 6,
+        overflow: 'hidden',
+    },
+    shimmerContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+    },
+    shimmerGradient: {
+        position: 'absolute',
+        top: 0,
+        right: -100,
+        bottom: 0,
+        width: 100,
+        height: '100%',
     },
 });
 

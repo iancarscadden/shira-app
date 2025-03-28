@@ -124,6 +124,37 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
     const [playingItemId, setPlayingItemId] = useState<string | null>(null);
     const audioRef = useRef<Audio.Sound | null>(null);
 
+    // Add shimmer animation:
+    const shimmerAnim = useRef(new Animated.Value(0)).current;
+    
+    // Animate shimmer when loading
+    useEffect(() => {
+        let shimmerAnimation: Animated.CompositeAnimation | null = null;
+        
+        if (isLoadingPhrase) {
+            // Create shimmer animation
+            shimmerAnimation = Animated.loop(
+                Animated.timing(shimmerAnim, {
+                    toValue: 1,
+                    duration: 1200,
+                    useNativeDriver: true,
+                    easing: Easing.ease
+                })
+            );
+            shimmerAnimation.start();
+        } else {
+            // Reset animation
+            shimmerAnim.setValue(0);
+        }
+        
+        // Cleanup animation when component unmounts or state changes
+        return () => {
+            if (shimmerAnimation) {
+                shimmerAnimation.stop();
+            }
+        };
+    }, [isLoadingPhrase]);
+
     // Initialize messages with conversationalData when it changes
     useEffect(() => {
         if (conversationalData) {
@@ -981,6 +1012,7 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
             // Configure audio session optimized for low-latency streaming
             try {
                 await Audio.setAudioModeAsync({
+                    allowsRecordingIOS: false,  // Add this line to ensure consistent audio routing through speaker
                     playsInSilentModeIOS: true,
                     staysActiveInBackground: false,
                     shouldDuckAndroid: true,
@@ -1165,22 +1197,8 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
         setShowTranslation(prev => !prev);
     };
 
-    // Update the renderPhrase function to toggle between original and translated text
+    // Update the renderPhrase function to toggle "SAY" element visibility and text color
     const renderPhrase = () => {
-        if (isLoadingPhrase) {
-            return (
-                <View style={styles.phraseContainer}>
-                    <View style={styles.phraseSkeleton}>
-                        <View style={styles.phraseSkeletonLine} />
-                        <View style={[styles.phraseSkeletonLine, { width: '70%' }]} />
-                    </View>
-                    <View style={styles.translationSkeleton}>
-                        <View style={[styles.translationSkeletonLine, { width: '60%' }]} />
-                    </View>
-                </View>
-            );
-        }
-
         return (
             <Animated.View 
                 style={[
@@ -1193,33 +1211,114 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
                     }
                 ]}
             >
-                {/* "SAY" label with microphone icon and speaker icon aligned in same row */}
-                <View style={styles.sayLabelRow}>
-                    <View style={styles.sayLabelContainer}>
-                        <Text style={styles.sayLabelText}>SAY</Text>
-                        <Ionicons name="mic" size={12} color="#FFFFFF" style={styles.sayLabelIcon} />
+                {/* "SAY" label - only show when not in translation mode */}
+                {!showTranslation && (
+                    <View style={styles.sayLabelRow}>
+                        <View style={styles.sayLabelContainer}>
+                            <Text style={styles.sayLabelText}>SAY</Text>
+                            <Ionicons name="mic" size={12} color="#FFFFFF" style={styles.sayLabelIcon} />
+                        </View>
+                        
+                        {/* Speaker icon for phrase - now positioned next to SAY label */}
+                        <TouchableOpacity 
+                            style={[
+                                styles.phraseSpeakerIconContainer,
+                                isPlayingAudio && playingItemId === 'phrase-container' && styles.speakerIconContainerActive
+                            ]}
+                            onPress={() => handleSpeechPress(currentPhrase.text, 'phrase-container')}
+                            activeOpacity={0.7}
+                        >
+                            <Animated.View style={{ transform: [{ scale: micScale }] }}>
+                                <Ionicons 
+                                    name={isPlayingAudio && playingItemId === 'phrase-container' ? "pause" : "volume-high"} 
+                                    size={22} 
+                                    color={isPlayingAudio && playingItemId === 'phrase-container' ? "#FFFFFF" : "#AAAAAA"} 
+                                />
+                            </Animated.View>
+                        </TouchableOpacity>
                     </View>
-                    
-                    {/* Speaker icon for phrase - now positioned next to SAY label */}
-                    <TouchableOpacity 
-                        style={styles.phraseSpeakerIconContainer}
-                        onPress={() => handleSpeechPress(currentPhrase.text, 'phrase-container')}
-                        activeOpacity={0.7}
-                    >
-                        <Animated.View style={{ transform: [{ scale: micScale }] }}>
-                            <Ionicons 
-                                name={isPlayingAudio && playingItemId === 'phrase-container' ? "pause-circle" : "volume-high"}
-                                size={22} 
-                                color="#5A51E1" 
-                            />
-                        </Animated.View>
-                    </TouchableOpacity>
-                </View>
+                )}
+
+                {/* When in translation mode, only show the speaker button at the top */}
+                {showTranslation && (
+                    <View style={styles.translationSpeakerRow}>
+                        <TouchableOpacity 
+                            style={[
+                                styles.phraseSpeakerIconContainer,
+                                isPlayingAudio && playingItemId === 'phrase-container' && styles.speakerIconContainerActive
+                            ]}
+                            onPress={() => handleSpeechPress(currentPhrase.text, 'phrase-container')}
+                            activeOpacity={0.7}
+                        >
+                            <Animated.View style={{ transform: [{ scale: micScale }] }}>
+                                <Ionicons 
+                                    name={isPlayingAudio && playingItemId === 'phrase-container' ? "pause" : "volume-high"} 
+                                    size={22} 
+                                    color={isPlayingAudio && playingItemId === 'phrase-container' ? "#FFFFFF" : "#AAAAAA"} 
+                                />
+                            </Animated.View>
+                        </TouchableOpacity>
+                    </View>
+                )}
                 
-                {/* Speaking phrase text - show either original or translation based on state */}
-                <Text style={styles.phraseText}>
-                    {showTranslation && currentPhrase.translation ? currentPhrase.translation : currentPhrase.text}
-                </Text>
+                {/* Display either the loading skeleton or the actual phrase text */}
+                {isLoadingPhrase ? (
+                    <View style={styles.phraseTextSkeleton}>
+                        <View style={styles.phraseSkeletonLine}>
+                            <Animated.View 
+                                style={[
+                                    styles.shimmerContainer,
+                                    {
+                                        transform: [{ 
+                                            translateX: shimmerAnim.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: [-200, 200]
+                                            }) 
+                                        }]
+                                    }
+                                ]}
+                            >
+                                <LinearGradient
+                                    colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                                    start={{ x: 0, y: 0 }}
+                                    end={{ x: 1, y: 0 }}
+                                    style={styles.shimmerGradient}
+                                />
+                            </Animated.View>
+                        </View>
+                        {!showTranslation && (
+                            <View style={[styles.phraseSkeletonLine, { width: '70%' }]}>
+                                <Animated.View 
+                                    style={[
+                                        styles.shimmerContainer,
+                                        {
+                                            transform: [{ 
+                                                translateX: shimmerAnim.interpolate({
+                                                    inputRange: [0, 1],
+                                                    outputRange: [-200, 200]
+                                                }) 
+                                            }]
+                                        }
+                                    ]}
+                                >
+                                    <LinearGradient
+                                        colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                                        start={{ x: 0, y: 0 }}
+                                        end={{ x: 1, y: 0 }}
+                                        style={styles.shimmerGradient}
+                                    />
+                                </Animated.View>
+                            </View>
+                        )}
+                    </View>
+                ) : (
+                    <Text style={[
+                        styles.phraseText,
+                        showTranslation && styles.translatedPhraseText
+                    ]}>
+                        {showTranslation && currentPhrase.translation ? currentPhrase.translation : currentPhrase.text}
+                    </Text>
+                )}
             </Animated.View>
         );
     };
@@ -1319,7 +1418,7 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
                             ]}
                             ref={index === messages.length - 1 ? lastMessageRef : null}
                         >
-                            {/* Message bubble */}
+                            {/* Message bubble with speaker icon for system messages */}
                             {msg.isUser ? (
                                 // User message with gradient
                                 <LinearGradient
@@ -1343,49 +1442,54 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
                                     )}
                                 </LinearGradient>
                             ) : (
-                                // System message
-                                <View 
-                                    style={[
-                                        styles.messageBubble,
-                                        index === 0 && !msg.isUser ? styles.firstMessageBubble : styles.systemBubble
-                                    ]}
-                                >
-                                    <Text style={[
-                                        styles.messageText,
-                                        index === 0 && !msg.isUser ? styles.firstMessageText : styles.systemMessageText
-                                    ]}>
-                                        {msg.text.split('\n').map((line, i) => (
-                                            <Text key={i}>
-                                                {line}
-                                                {i < msg.text.split('\n').length - 1 ? '\n' : ''}
-                                            </Text>
-                                        ))}
-                                    </Text>
-                                
-                                    {/* Show translation if available (only for system messages) */}
-                                    {!msg.isUser && msg.translation && (
-                                        <Text style={styles.translationText}>
-                                            {msg.translation}
+                                // System message with speaker icon
+                                <View style={styles.systemMessageContainer}>
+                                    <View 
+                                        style={[
+                                            styles.messageBubble,
+                                            index === 0 && !msg.isUser ? styles.firstMessageBubble : styles.systemBubble
+                                        ]}
+                                    >
+                                        <Text style={[
+                                            styles.messageText,
+                                            index === 0 && !msg.isUser ? styles.firstMessageText : styles.systemMessageText
+                                        ]}>
+                                            {msg.text.split('\n').map((line, i) => (
+                                                <Text key={i}>
+                                                    {line}
+                                                    {i < msg.text.split('\n').length - 1 ? '\n' : ''}
+                                                </Text>
+                                            ))}
                                         </Text>
+                                    
+                                        {/* Show translation if available (only for system messages) */}
+                                        {!msg.isUser && msg.translation && (
+                                            <Text style={styles.translationText}>
+                                                {msg.translation}
+                                            </Text>
+                                        )}
+                                    </View>
+                                    
+                                    {/* Speaker icon for AI prompt messages - now directly next to bubble */}
+                                    {isPromptMessage(msg, index) && (
+                                        <TouchableOpacity 
+                                            style={[
+                                                styles.speakerIconContainer,
+                                                isPlayingAudio && playingItemId === `message-${index}` && styles.speakerIconContainerActive
+                                            ]}
+                                            onPress={() => handleSpeechPress(msg.text, `message-${index}`)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Animated.View style={{ transform: [{ scale: micScale }] }}>
+                                                <Ionicons 
+                                                    name={isPlayingAudio && playingItemId === `message-${index}` ? "pause" : "volume-high"} 
+                                                    size={22} 
+                                                    color={isPlayingAudio && playingItemId === `message-${index}` ? "#FFFFFF" : "#AAAAAA"} 
+                                                />
+                                            </Animated.View>
+                                        </TouchableOpacity>
                                     )}
                                 </View>
-                            )}
-                            
-                            {/* Speaker icon for AI prompt messages */}
-                            {isPromptMessage(msg, index) && (
-                                <TouchableOpacity 
-                                    style={styles.speakerIconContainer}
-                                    onPress={() => handleSpeechPress(msg.text, `message-${index}`)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Animated.View style={{ transform: [{ scale: micScale }] }}>
-                                        <Ionicons 
-                                            name={isPlayingAudio && playingItemId === `message-${index}` ? "pause-circle" : "volume-high"} 
-                                            size={22} 
-                                            color="#5A51E1" 
-                                        />
-                                    </Animated.View>
-                                </TouchableOpacity>
                             )}
                         </View>
                     ))}
@@ -1430,7 +1534,7 @@ const ConversationalView: React.FC<ConversationalViewProps> = ({ conversationalD
                                 <MaterialCommunityIcons 
                                     name="translate" 
                                     size={26} 
-                                    color={showTranslation ? "#5A51E1" : "#AAAAAA"} 
+                                    color={showTranslation ? "#FFFFFF" : "#AAAAAA"} 
                                 />
                             </TouchableOpacity>
                         </Animated.View>
@@ -1836,23 +1940,30 @@ const styles = StyleSheet.create({
         letterSpacing: 0.3,
         lineHeight: 24,
     },
+    systemMessageContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        maxWidth: '100%',
+    },
     speakerIconContainer: {
         width: 38,
         height: 38,
         borderRadius: 19,
-        backgroundColor: 'rgba(24, 24, 24, 0.8)',
+        backgroundColor: 'rgba(59, 59, 61, 0.8)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(90, 81, 225, 0.5)',
-        shadowColor: '#5A51E1',
+        shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 0,
+            height: 2,
         },
-        shadowOpacity: 0.4,
-        shadowRadius: 5,
-        elevation: 4,
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
+        marginLeft: 8,
+    },
+    speakerIconContainerActive: {
+        backgroundColor: '#5A51E1',
     },
     purpleFooterContainer: {
         position: 'absolute',
@@ -1909,7 +2020,7 @@ const styles = StyleSheet.create({
         elevation: 5,
     },
     translateButtonActive: {
-        backgroundColor: 'rgba(90, 81, 225, 0.08)', // Lighter background highlight
+        backgroundColor: '#5A51E1',
     },
     footerMicButtonContainer: {
         alignItems: 'center',
@@ -1925,8 +2036,6 @@ const styles = StyleSheet.create({
         borderRadius: 34,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 2,
-        borderColor: 'rgba(255, 255, 255, 0.5)',
         shadowColor: '#5a51e1',
         shadowOffset: {
             width: 0,
@@ -1966,8 +2075,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.5,
         shadowRadius: 8,
         elevation: 8,
-        borderWidth: 2,
-        borderColor: 'rgba(255, 255, 255, 0.5)',
     },
     footer: {
         display: 'none',
@@ -2104,11 +2211,13 @@ const styles = StyleSheet.create({
     },
     
     phraseSkeletonLine: {
-        height: 20,
-        width: '90%',
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
-        borderRadius: 4,
+        height: 22, // Match the phraseText line height more closely
+        width: '85%', // Slightly narrower for a more natural look
+        backgroundColor: 'rgba(255, 255, 255, 0.15)', // Slightly brighter for visibility
+        borderRadius: 6, // More rounded corners
         marginVertical: 4,
+        position: 'relative', // Ensure the shimmer can be positioned absolutely inside
+        overflow: 'hidden', // Clip the shimmer gradient
     },
     
     translationSkeleton: {
@@ -2151,19 +2260,17 @@ const styles = StyleSheet.create({
         width: 38,
         height: 38,
         borderRadius: 19,
-        backgroundColor: 'rgba(24, 24, 24, 0.8)',
+        backgroundColor: 'rgba(59, 59, 61, 0.8)',
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(90, 81, 225, 0.5)',
-        shadowColor: '#5A51E1',
+        shadowColor: '#000',
         shadowOffset: {
             width: 0,
-            height: 0,
+            height: 2,
         },
-        shadowOpacity: 0.4,
-        shadowRadius: 5,
-        elevation: 4,
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     phraseContainer: {
         width: '95%',
@@ -2224,6 +2331,38 @@ const styles = StyleSheet.create({
         fontSize: 13,
         marginTop: 8,
         lineHeight: 18,
+    },
+    translatedPhraseText: {
+        color: 'rgba(255, 255, 255, 0.6)', // Gray color for translated text
+    },
+    translationSpeakerRow: {
+        flexDirection: 'row',
+        width: '100%',
+        justifyContent: 'flex-end',
+        alignItems: 'center',
+        marginBottom: 14,
+        paddingHorizontal: 5,
+    },
+    phraseTextSkeleton: {
+        width: '100%',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingHorizontal: 4,
+    },
+    shimmerContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+    },
+    shimmerGradient: {
+        position: 'absolute',
+        top: 0,
+        right: -80,
+        width: 80,
+        height: '100%',
     },
 });
 

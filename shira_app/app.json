@@ -2,14 +2,14 @@
   "expo": {
     "name": "Shira",
     "slug": "shira_app",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#181818"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -17,7 +17,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.iancarscadden.shiraapp",
-      "buildNumber": "4",
+      "buildNumber": "8",
       "config": {
         "usesAppleSignIn": true,
         "googleSignIn": {

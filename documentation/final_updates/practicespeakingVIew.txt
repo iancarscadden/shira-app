@@ -1,0 +1,18 @@
+New screen and feature:
+
+We are now going to desin the new area in the app where the user will be able to see their discovered phrases.
+
+For now we are now going to connect this with any database services or any backend logic, we are just going to
+build the UI. 
+
+In progress.tsx we have a section for have a conversatoin, where the user can press it, and we now need to build
+the screen that pressing on that sectinon takes the user to.
+
+this section will be called discoveredPhrases.tsx and will be put in the /views directory. Now this screen
+will need to be designed to look very similar to the style of the practice speaking element in progress.tsx
+as well as the similar styles in progress.tsx 
+
+Right now this screen will just have a dummy list of some spanish phrases as we want to get down the UI before 
+moving on to adding any real database functionality. this screen will also need a way from it to get back to
+progress.tsx main screen. also, we dont need to make the phrases pressable at the moment they just need to be in a 
+nice looking list where they look like things you can press. 

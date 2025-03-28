@@ -433,7 +433,6 @@ const Learn: React.FC = () => {
     const ELEMENT_PADDING = 16; // Use consistent padding between elements
     const VIDEO_TO_CONTROLS_GAP = ELEMENT_PADDING;
     const controlsHeight = 44; // Height of seek buttons container
-    const FIXED_CONTAINER_HEIGHT = videoHeight + controlsHeight;
     
     // Final top position for the fixed container (video player)
     const finalFixedTop = insets.top; // Remove the +20 padding to connect directly with safe area
@@ -442,11 +441,11 @@ const Learn: React.FC = () => {
     // Fixed container position
     const fixedContainerTop = finalFixedTop;
 
-    // Use consistent element positioning
-    const controlsTop = finalFixedTop + videoHeight + VIDEO_TO_CONTROLS_GAP;
+    // Update to make controls position dynamically based on video player
+    // Instead of a fixed controlsTop value, we'll calculate it in the view
     
     // Lessons section position and dimensions - reduce the space between controls and lessons
-    const lessonsTop = controlsTop + controlsHeight; // Removed spacing completely for a connected look
+    const lessonsTop = finalFixedTop + videoHeight + 8 + controlsHeight; // Recalculate based on dynamic controls
     const lessonsHeight = height - lessonsTop - TAB_BAR_HEIGHT - BOTTOM_MARGIN - insets.bottom;
     
     // Background color for safe area
@@ -2163,7 +2162,7 @@ const Learn: React.FC = () => {
                 {/* Video Player */}
                 <Animated.View style={[styles.fixedContainer, { 
                     top: fixedContainerTop,
-                    height: FIXED_CONTAINER_HEIGHT,
+                    // Dynamic height based on content
                 }]}>
                     {state.currentLesson && (
                         <>
@@ -2592,8 +2591,11 @@ const Learn: React.FC = () => {
                                 </View>
                             </View>
                             
-                            {/* Integrated Video Controls - Seek buttons only */}
-                            <View style={styles.controlsContainer}>
+                            {/* Integrated Video Controls - Seek buttons only - NOW RELATIVE TO VIDEO PLAYER */}
+                            <View style={[
+                                styles.controlsContainer, 
+                                { marginTop: 8 } // Use the gap constant for consistency
+                            ]}>
                                 <View style={styles.seekButtonsContainer}>
                                     {/* Seek back button */}
                                     <TouchableOpacity
@@ -2713,14 +2715,13 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         zIndex: 2,
-        backgroundColor: 'transparent',
     },
     videoSection: {
         backgroundColor: 'transparent',
     },
     videoContainer: {
         width: '100%',
-        backgroundColor: '#181818', // Change back to original color
+        backgroundColor: '#000000', // Changed from #181818 to #000000
         position: 'relative',
         borderRadius: 0,
         overflow: 'hidden',
@@ -2734,7 +2735,7 @@ const styles = StyleSheet.create({
         zIndex: 1,
     },
     skeletonBox: {
-        backgroundColor: '#181818', // Change back to original color
+        backgroundColor: '#000000', // Changed from #181818 to #000000
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -2752,7 +2753,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.5,
         shadowRadius: 10,
         elevation: 10,
-        backgroundColor: '#181818', // Change back to original color
+        backgroundColor: '#000000', // Changed from #181818 to #000000
     },
     captionOverlay: {
         position: 'absolute',
@@ -3053,12 +3054,9 @@ const styles = StyleSheet.create({
         backgroundColor: 'transparent',
     },
     controlsContainer: {
-        position: 'absolute',
-        top: 250, // Hard-coded value instead of calculated value
-        left: 20, // Match left edge with Keep Learning section
-        right: 20, // Match right edge with Keep Learning section
-        paddingHorizontal: 0, // No padding needed since container is already aligned
-        height: 44, // Hard-coded height
+        paddingHorizontal: 20,
+        width: '100%',
+        // Remove top: controlsTop - this is what was causing the fixed positioning
     },
     controlsBlur: {
         borderRadius: 12,
@@ -3083,7 +3081,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#181818',
+        backgroundColor: '#000000', // Changed from #181818 to #000000
         zIndex: 2,
     },
     tabNavigationContainer: {

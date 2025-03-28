@@ -8,6 +8,12 @@ This directory contains Edge Functions for the Shira app that need to be deploye
 
 This function deletes a user's authentication record from Supabase Auth. It requires the Service Role Key to perform this operation.
 
+### conversation-handler
+
+This function processes spoken language recordings, evaluates pronunciation, and generates continuing conversations for the language learning feature. It integrates Google Speech-to-Text and Google Gemini to create an interactive language practice experience.
+
+See the [conversation-handler README](./supabase/functions/conversation-handler/README.md) for detailed documentation.
+
 ## Deployment Instructions
 
 1. Install the Supabase CLI if you haven't already:

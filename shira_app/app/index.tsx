@@ -3,7 +3,7 @@ import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
 import React, { useEffect } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../supabase/supabaseClient';
 
@@ -13,33 +13,43 @@ const Index = () => {
     useEffect(() => {
         async function checkSession() {
             console.log("Index.tsx: Checking session...");
-            const { data: { session }, error } = await supabase.auth.getSession();
-            if (error) {
-                console.error('Index.tsx: Error getting session:', error);
-            }
-            console.log("Index.tsx: Session found:", session);
-            if (session?.user) {
-                router.replace('/learn'); // User is logged in
-            } else {
-                router.replace('/onboarding'); // User is not logged in
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                if (error) {
+                    console.error('Index.tsx: Error getting session:', error);
+                    router.replace('/onboarding');
+                    return;
+                }
+                
+                console.log("Index.tsx: Session found:", session);
+                if (session?.user) {
+                    router.replace('/learn'); // User is logged in
+                } else {
+                    router.replace('/onboarding'); // User is not logged in
+                }
+            } catch (err) {
+                console.error('Index.tsx: Unexpected error:', err);
+                router.replace('/onboarding');
             }
         }
-        checkSession();
+        
+        // Slightly longer delay to ensure splash screen has time to display properly
+        const timeoutId = setTimeout(() => {
+            checkSession();
+        }, 300);
+        
+        return () => clearTimeout(timeoutId);
     }, [router]);
 
-    return (
-        <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#0000ff" />
-        </View>
-    );
+    // Return a completely transparent view with matching background
+    return <View style={styles.container} />;
 };
 
 const styles = StyleSheet.create({
-    loadingContainer: {
+    container: {
         flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
+        backgroundColor: '#181818', // Match splash background color for consistency
+    }
 });
 
 export default Index;

@@ -52,6 +52,7 @@
     "react-dom": "18.3.1",
     "react-loading-skeleton": "^3.5.0",
     "react-native": "0.76.7",
+    "react-native-copilot": "^3.3.3",
     "react-native-gesture-handler": "~2.20.2",
     "react-native-get-random-values": "^1.11.0",
     "react-native-gifted-chat": "^2.6.5",

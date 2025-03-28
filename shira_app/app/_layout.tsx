@@ -2,19 +2,27 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import React, { useEffect, useState, useRef } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { View, StyleSheet, Platform, Animated } from 'react-native';
 import { Slot } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { supabase } from '../supabase/supabaseClient';
 import { User } from '@supabase/supabase-js';
 import { updateUserStreak } from '../supabase/progressService';
 import StreakDisplay from './views/StreakDisplay';
+import CustomSplashScreen from './views/CustomSplashScreen';
+import * as SplashScreen from 'expo-splash-screen';
 import { 
     initializeRevenueCat, 
     isRevenueCatInitialized, 
     checkSubscriptionStatus 
 } from '../supabase/revenueCatClient';
+
+// Keep the splash screen visible while we fetch resources
+// This must be called before any other Expo modules are imported
+SplashScreen.preventAutoHideAsync().catch((error) => {
+    console.warn('Error preventing splash screen from auto-hiding:', error);
+});
 
 // XP per level constant
 const XP_PER_LEVEL = 500;
@@ -30,12 +38,39 @@ const RootLayout = () => {
     const [currentStreak, setCurrentStreak] = useState(1);
     const [currentXP, setCurrentXP] = useState(0);
     const [previousStreak, setPreviousStreak] = useState<number | null>(null);
+    const [appIsReady, setAppIsReady] = useState(false);
+    
+    // For custom splash screen transition
+    const [showCustomSplash, setShowCustomSplash] = useState(true);
     
     // Add a flag to prevent multiple concurrent streak updates
     const isUpdatingStreakRef = useRef(false);
     
     // Add a ref to track the last subscription check time
     const lastSubscriptionCheckRef = useRef(0);
+
+    // Method to hide the splash screen with a smooth animation
+    const hideSplashScreen = useCallback(async () => {
+        if (appIsReady) {
+            try {
+                console.log("Hiding native splash screen");
+                // Hide the native splash screen
+                await SplashScreen.hideAsync();
+                
+                // After native splash screen is hidden, keep custom splash visible
+                // with virtually no delay for the smoothest transition
+                // The custom splash screen will perfectly match the native one
+                setTimeout(() => {
+                    setShowCustomSplash(false);
+                }, 50); // Very minimal delay
+            } catch (e) {
+                console.warn("Error hiding splash screen:", e);
+                // If there's an error hiding the system splash screen, 
+                // still hide our custom one
+                setShowCustomSplash(false);
+            }
+        }
+    }, [appIsReady]);
 
     // Initialize RevenueCat
     useEffect(() => {
@@ -155,6 +190,7 @@ const RootLayout = () => {
                 if (error) {
                     console.error('RootLayout: Error getting session:', error);
                     setLoading(false);
+                    setAppIsReady(true);
                     return;
                 }
                 console.log("RootLayout: Session loaded:", session);
@@ -162,6 +198,7 @@ const RootLayout = () => {
                 // Set user and loading state first to prevent blocking the UI
                 setUser(session?.user ?? null);
                 setLoading(false);
+                setAppIsReady(true);
                 
                 // Update streak after the app is loaded
                 if (session?.user) {
@@ -177,6 +214,7 @@ const RootLayout = () => {
             } catch (error) {
                 console.error('RootLayout: Unexpected error in loadSession:', error);
                 setLoading(false);
+                setAppIsReady(true);
             }
         }
         loadSession();
@@ -212,15 +250,13 @@ const RootLayout = () => {
         };
     }, [revenueCatInitialized]); // Add revenueCatInitialized as a dependency
 
-    if (loading || !revenueCatInitialized) {
-        return (
-            <SafeAreaProvider>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#0000ff" />
-                </View>
-            </SafeAreaProvider>
-        );
-    }
+    // Effect to hide splash screen once the app is ready
+    useEffect(() => {
+        if (appIsReady) {
+            // Minimal delay to ensure app is fully ready before transition
+            hideSplashScreen();
+        }
+    }, [appIsReady, hideSplashScreen]);
 
     return (
         <SafeAreaProvider>
@@ -233,17 +269,13 @@ const RootLayout = () => {
                 xpPerLevel={XP_PER_LEVEL}
                 onAnimationComplete={() => setShowStreakDisplay(false)}
             />
+            {/* Custom Splash Screen for smooth transitions */}
+            <CustomSplashScreen isVisible={showCustomSplash} />
         </SafeAreaProvider>
     );
 };
 
-const styles = StyleSheet.create({
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-});
+const styles = StyleSheet.create({});
 
 export default RootLayout;
 

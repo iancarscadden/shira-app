@@ -22,12 +22,10 @@ const INACTIVE_COLOR = 'rgba(255, 255, 255, 0.35)';
 const TabsLayout = () => {
     const TabIcon = ({ 
         iconName, 
-        label, 
         focused,
         onPress 
     }: { 
         iconName: string; 
-        label: string; 
         focused: boolean;
         onPress: () => void;
     }) => {
@@ -63,7 +61,7 @@ const TabsLayout = () => {
                             />
                             <FontAwesome5
                                 name={iconName}
-                                size={20}
+                                size={18}
                                 color="#FFFFFF"
                                 solid
                                 style={[
@@ -76,7 +74,7 @@ const TabsLayout = () => {
                         <View style={styles.inactiveIconContainer}>
                             <FontAwesome5
                                 name={iconName}
-                                size={20}
+                                size={18}
                                 color={INACTIVE_COLOR}
                                 solid
                                 style={[
@@ -86,12 +84,6 @@ const TabsLayout = () => {
                             />
                         </View>
                     )}
-                    <Text style={[
-                        styles.tabLabel,
-                        focused ? styles.activeTabLabel : styles.inactiveTabLabel
-                    ]}>
-                        {label}
-                    </Text>
                 </Animated.View>
             </Pressable>
         );
@@ -107,23 +99,20 @@ const TabsLayout = () => {
                 }
             }}
             tabBar={({ state, navigation }) => (
-                <BlurView intensity={20} tint="dark" style={styles.blurContainer}>
+                <BlurView intensity={40} tint="dark" style={styles.blurContainer}>
                     <View style={styles.tabBar}>
                         <TabIcon 
                             iconName="trophy"
-                            label="Progress"
                             focused={state.index === 0}
                             onPress={() => navigation.navigate('progress')}
                         />
                         <TabIcon 
                             iconName="play"
-                            label="Watch"
                             focused={state.index === 1}
                             onPress={() => navigation.navigate('learn')}
                         />
                         <TabIcon 
                             iconName="user"
-                            label="Profile"
                             focused={state.index === 2}
                             onPress={() => navigation.navigate('profile')}
                         />
@@ -154,10 +143,10 @@ const styles = StyleSheet.create({
         backgroundColor: 'rgba(24, 24, 24, 0.7)',
         height: 80,
         justifyContent: 'space-around',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         elevation: 0,
-        paddingBottom: 22,
-        paddingTop: 8,
+        paddingBottom: 36,
+        paddingTop: 10,
     },
     tabButton: {
         flex: 1,
@@ -170,7 +159,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         width: '100%',
-        paddingTop: 4,
+        paddingTop: 3,
         height: 58,
     },
     iconContainer: {
@@ -184,10 +173,10 @@ const styles = StyleSheet.create({
             width: 0,
             height: 0,
         },
-        shadowOpacity: 0.5,
-        shadowRadius: 8,
-        elevation: 5,
-        marginBottom: 2,
+        shadowOpacity: 0.6,
+        shadowRadius: 10,
+        elevation: 6,
+        marginBottom: 0,
     },
     gradientIconBackground: {
         position: 'absolute',
@@ -203,7 +192,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         backgroundColor: 'rgba(255, 255, 255, 0.05)',
-        marginBottom: 2,
+        marginBottom: 0,
     },
     tabIcon: {
         zIndex: 1,
@@ -212,8 +201,8 @@ const styles = StyleSheet.create({
         marginLeft: 2,
     },
     tabLabel: {
-        marginTop: 2,
-        fontSize: 11,
+        marginTop: 3,
+        fontSize: 10,
         fontWeight: '600',
         textAlign: 'center',
         width: '100%',

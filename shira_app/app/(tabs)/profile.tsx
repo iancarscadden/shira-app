@@ -19,6 +19,7 @@ import {
     Dimensions,
     StatusBar,
     Platform,
+    Easing,
 } from 'react-native';
 import { Ionicons, MaterialIcons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -45,6 +46,35 @@ const Profile: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(false);
     const scrollY = useRef(new Animated.Value(0)).current;
     const [refreshKey, setRefreshKey] = useState(0);
+
+    // Add shimmer animation for skeletons
+    const shimmerAnim = useRef(new Animated.Value(0)).current;
+    
+    // Animate shimmer effect
+    useEffect(() => {
+        const animateShimmer = () => {
+            Animated.loop(
+                Animated.timing(shimmerAnim, {
+                    toValue: 1,
+                    duration: 1200,
+                    useNativeDriver: true,
+                    easing: Easing.ease
+                })
+            ).start();
+        };
+        
+        if (userLoading || sessionLoading) {
+            animateShimmer();
+        } else {
+            shimmerAnim.setValue(0);
+        }
+    }, [userLoading, sessionLoading]);
+    
+    // Create interpolated values for shimmer effect
+    const shimmerTranslateX = shimmerAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-200, 200]
+    });
 
     // Load user session on component mount.
     useEffect(() => {
@@ -376,18 +406,6 @@ const Profile: React.FC = () => {
         return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
     };
 
-    // Show loading indicator while user data is being fetched
-    if (userLoading) {
-        return (
-            <SafeAreaView style={styles.safeArea}>
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#5A51E1" />
-                    <Text style={styles.loadingText}>Loading profile...</Text>
-                </View>
-            </SafeAreaView>
-        );
-    }
-
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar barStyle="light-content" />
@@ -419,19 +437,80 @@ const Profile: React.FC = () => {
                     ) : (
                         <View style={styles.profileHeader}>
                             <View style={styles.avatar}>
-                                <Text style={styles.avatarText}>{getInitials()}</Text>
+                                {userLoading ? (
+                                    <Animated.View 
+                                        style={[
+                                            styles.shimmerContainer,
+                                            { transform: [{ translateX: shimmerTranslateX }] }
+                                        ]}
+                                    >
+                                        <LinearGradient
+                                            colors={['rgba(90, 81, 225, 0)', 'rgba(138, 114, 227, 0.25)', 'rgba(90, 81, 225, 0)']}
+                                            start={{ x: 0, y: 0 }}
+                                            end={{ x: 1, y: 0 }}
+                                            style={styles.shimmerGradient}
+                                        />
+                                    </Animated.View>
+                                ) : (
+                                    <Text style={styles.avatarText}>{getInitials()}</Text>
+                                )}
                             </View>
                             
                             <View style={styles.nameContainer}>
                                 <View style={styles.nameDisplayContainer}>
-                                    <Text style={styles.displayName}>
-                                        {displayName ? displayName : 'Enter display name'}
-                                    </Text>
+                                    <View style={styles.nameContentContainer}>
+                                        {userLoading ? (
+                                            <View style={styles.nameSkeleton}>
+                                                <Animated.View 
+                                                    style={[
+                                                        styles.shimmerContainer,
+                                                        {
+                                                            transform: [{ translateX: shimmerTranslateX }]
+                                                        }
+                                                    ]}
+                                                >
+                                                    <LinearGradient
+                                                        colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                                                        start={{ x: 0, y: 0 }}
+                                                        end={{ x: 1, y: 0 }}
+                                                        style={styles.shimmerGradient}
+                                                    />
+                                                </Animated.View>
+                                            </View>
+                                        ) : (
+                                            <Text style={styles.displayName}>
+                                                {displayName ? displayName : 'Enter display name'}
+                                            </Text>
+                                        )}
+                                    </View>
                                     <TouchableOpacity onPress={handleDisplayNameEdit} style={styles.editNameIcon}>
                                         <Ionicons name="pencil" size={20} color="#fff" />
                                     </TouchableOpacity>
                                 </View>
-                                <Text style={styles.emailText}>{email}</Text>
+                                
+                                <View style={styles.emailContainer}>
+                                    {userLoading ? (
+                                        <View style={styles.emailSkeleton}>
+                                            <Animated.View 
+                                                style={[
+                                                    styles.shimmerContainer,
+                                                    {
+                                                        transform: [{ translateX: shimmerTranslateX }]
+                                                    }
+                                                ]}
+                                            >
+                                                <LinearGradient
+                                                    colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.15)', 'rgba(255, 255, 255, 0)']}
+                                                    start={{ x: 0, y: 0 }}
+                                                    end={{ x: 1, y: 0 }}
+                                                    style={styles.shimmerGradient}
+                                                />
+                                            </Animated.View>
+                                        </View>
+                                    ) : (
+                                        <Text style={styles.emailText}>{email}</Text>
+                                    )}
+                                </View>
                                 
                                 {/* GO PRO Button */}
                                 <TouchableOpacity 
@@ -440,7 +519,7 @@ const Profile: React.FC = () => {
                                         currentUser?.is_pro === true ? styles.proButtonActive : {}
                                     ]}
                                     onPress={currentUser?.is_pro === true ? undefined : handleShowPaywall}
-                                    disabled={currentUser?.is_pro === true}
+                                    disabled={userLoading || currentUser?.is_pro === true}
                                 >
                                     <LinearGradient
                                         colors={currentUser?.is_pro === true ? ['#51e1a2', '#5a51e1'] : ['#e15190', '#5a51e1']}
@@ -557,11 +636,11 @@ const Profile: React.FC = () => {
                 </View>
 
                 <View style={styles.footer}>
-                    <Text style={styles.versionText}>Shira v1.0.0</Text>
+                    <Text style={styles.versionText}>Shira v1.0.1</Text>
                 </View>
             </ScrollView>
 
-            {/* Loading Indicator */}
+            {/* Loading Indicator for operations */}
             {loading && (
                 <View style={styles.loadingOverlay}>
                     <ActivityIndicator size="large" color="#5A51E1" />
@@ -584,16 +663,6 @@ const styles = StyleSheet.create({
         paddingTop: 20,
         paddingBottom: 40,
     },
-    loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    loadingText: {
-        marginTop: 10,
-        fontSize: 16,
-        color: '#FFFFFF',
-    },
     nameSection: {
         marginBottom: 30,
         paddingHorizontal: 20,
@@ -613,11 +682,23 @@ const styles = StyleSheet.create({
         marginRight: 15,
         borderWidth: 2,
         borderColor: 'rgba(255, 255, 255, 0.3)',
+        overflow: 'hidden',
     },
-    avatarText: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
+    shimmerContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+    },
+    shimmerGradient: {
+        position: 'absolute',
+        top: 0,
+        right: -80,
+        bottom: 0,
+        width: 80,
+        height: '100%',
     },
     nameContainer: {
         flex: 1,
@@ -628,6 +709,33 @@ const styles = StyleSheet.create({
         position: 'relative',
         width: '100%',
         marginBottom: 5,
+    },
+    nameContentContainer: {
+        flex: 1,
+        height: 28,  // Match exact height of the displayName text
+        justifyContent: 'center',
+        paddingRight: 10, // Add padding to avoid touching the pencil icon
+    },
+    emailContainer: {
+        width: '90%', // Constrain width to prevent excessive stretching
+        maxWidth: 250, // Set a max width
+        height: 16,  // Match exact height of the email text
+        marginBottom: 10,
+        justifyContent: 'center',
+    },
+    nameSkeleton: {
+        height: 24,  // Match the font size of displayName
+        width: 180,  // Fixed width value
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 4,
+        overflow: 'hidden',
+    },
+    emailSkeleton: {
+        height: 14,  // Match the font size of emailText
+        width: 140,  // Fixed width value
+        backgroundColor: 'rgba(255, 255, 255, 0.07)',
+        borderRadius: 4,
+        overflow: 'hidden',
     },
     displayName: {
         fontSize: 24,
@@ -759,17 +867,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         color: 'rgba(255,255,255,0.4)',
     },
-    loadingOverlay: {
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(24,24,24,0.7)',
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 100,
-    },
     proButton: {
         marginTop: 10,
         alignSelf: 'flex-start',
@@ -786,6 +883,22 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: 'bold',
         fontSize: 14,
+    },
+    avatarText: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+    },
+    loadingOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(24, 24, 24, 0.7)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 100,
     },
 });
 export default Profile;
