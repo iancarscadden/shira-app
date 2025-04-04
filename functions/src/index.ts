@@ -6,10 +6,10 @@ import OpenAI from "openai";
 // Initialize clients
 const speechClient = new SpeechClient();
 const openai = new OpenAI({
-    apiKey: "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"
+    apiKey: ""
 });
 
-const ASSISTANT_ID = 'asst_G04oUdxuiMxaiV13YlfEdbNj';
+const ASSISTANT_ID = '';
 
 interface WordConfidence {
     word: string;
