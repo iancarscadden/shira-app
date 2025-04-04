@@ -161,7 +161,7 @@ async function generateConversationContinuation(
   responsePromptTranslation: string;
 }> {
   try {
-    const apiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyCjwlSSs6nVZ0QMK7iyJZEgKONFtq5xJsw';
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash-lite" });
 
