@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 // Hardcoded API key as requested
-const ELEVENLABS_API_KEY = "sk_c32243f922c9200ee5d90b2e29687298733ff0aea4546444";
+const ELEVENLABS_API_KEY = "";
 const DEFAULT_VOICE_ID = "Nh2zY9kknu6z4pZy6FhD";
 
 serve(async (req) => {
