@@ -74,7 +74,7 @@ async function processAudioForSpeechToText(audioContent: string): Promise<string
 async function transcribeSpeech(audioContent: string): Promise<SpeechRecognitionResult[]> {
   try {
     // Use the same API key as Gemini since both are Google APIs
-    const apiKey = Deno.env.get('GEMINI_API_KEY') || 'AIzaSyCjwlSSs6nVZ0QMK7iyJZEgKONFtq5xJsw';
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
     
     const url = `https://speech.googleapis.com/v1/speech:recognize?key=${apiKey}`;
     
