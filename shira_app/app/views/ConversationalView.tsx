@@ -39,7 +39,7 @@ interface ConversationalData {
 
 const { width, height } = Dimensions.get('window');
 // Replace hardcoded Supabase URL with a configurable constant that can be changed later
-const CONVERSATION_API_URL = 'https://friwhmjhptjucqwdsqei.supabase.co/functions/v1/conversation-handler';
+const CONVERSATION_API_URL = '';
 
 interface ConversationalViewProps {
     conversationalData: ConversationalData | null;
