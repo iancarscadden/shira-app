@@ -2,7 +2,7 @@
 import 'react-native-get-random-values';
 import 'react-native-url-polyfill/auto';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, createContext } from 'react';
 import { View, StyleSheet, Platform, Animated } from 'react-native';
 import { Slot } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { updateUserStreak } from '../supabase/progressService';
 import StreakDisplay from './views/StreakDisplay';
 import CustomSplashScreen from './views/CustomSplashScreen';
 import * as SplashScreen from 'expo-splash-screen';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
     initializeRevenueCat, 
     isRevenueCatInitialized, 
@@ -29,6 +30,22 @@ const XP_PER_LEVEL = 500;
 
 // Subscription check interval (every 30 minutes)
 const SUBSCRIPTION_CHECK_INTERVAL = 30 * 60 * 1000;
+
+// Tutorial storage keys for different screens
+const TUTORIAL_KEYS = {
+  LEARN: '@shira_hasSeenLearnTutorial',
+  CONVERSE_MAIN: '@shira_hasSeenConverseMainTutorial',
+  CONVERSE_INITIAL: '@shira_hasSeenConverseInitialTutorial',
+  CONTEXT: '@shira_hasSeenContextTutorial',
+  CULTURAL: '@shira_hasSeenCulturalTutorial',
+};
+
+// Create a context for tutorial management
+export const TutorialContext = createContext<{
+  resetTutorials: () => Promise<void>;
+}>({
+  resetTutorials: async () => {},
+});
 
 const RootLayout = () => {
     const [user, setUser] = useState<User | null>(null);
@@ -48,6 +65,17 @@ const RootLayout = () => {
     
     // Add a ref to track the last subscription check time
     const lastSubscriptionCheckRef = useRef(0);
+
+    // Function to reset all tutorial flags (useful for testing)
+    const resetTutorials = async () => {
+        try {
+            console.log("Resetting all tutorial flags");
+            await AsyncStorage.multiRemove(Object.values(TUTORIAL_KEYS));
+            console.log("All tutorial flags reset successfully");
+        } catch (error) {
+            console.error("Error resetting tutorial flags:", error);
+        }
+    };
 
     // Method to hide the splash screen with a smooth animation
     const hideSplashScreen = useCallback(async () => {
@@ -259,19 +287,21 @@ const RootLayout = () => {
     }, [appIsReady, hideSplashScreen]);
 
     return (
-        <SafeAreaProvider>
-            <Slot />
-            {/* Streak Display */}
-            <StreakDisplay
-                visible={showStreakDisplay}
-                streak={currentStreak}
-                currentXP={currentXP}
-                xpPerLevel={XP_PER_LEVEL}
-                onAnimationComplete={() => setShowStreakDisplay(false)}
-            />
-            {/* Custom Splash Screen for smooth transitions */}
-            <CustomSplashScreen isVisible={showCustomSplash} />
-        </SafeAreaProvider>
+        <TutorialContext.Provider value={{ resetTutorials }}>
+            <SafeAreaProvider>
+                <Slot />
+                {/* Streak Display */}
+                <StreakDisplay
+                    visible={showStreakDisplay}
+                    streak={currentStreak}
+                    currentXP={currentXP}
+                    xpPerLevel={XP_PER_LEVEL}
+                    onAnimationComplete={() => setShowStreakDisplay(false)}
+                />
+                {/* Custom Splash Screen for smooth transitions */}
+                <CustomSplashScreen isVisible={showCustomSplash} />
+            </SafeAreaProvider>
+        </TutorialContext.Provider>
     );
 };
 

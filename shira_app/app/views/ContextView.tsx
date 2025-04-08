@@ -1,13 +1,16 @@
 // app/views/ContextView.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing } from 'react-native';
-// @ts-ignore
-import TranslateIcon from '../components/translate.svg';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, ScrollView } from 'react-native';
 import { ContextData, Choice } from '../../supabase/types';
 import useUser from '../../hooks/useUser';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Context tutorial storage key
+const TUTORIAL_STORAGE_KEY = '@shira_hasSeenContextTutorial';
 
 // For confetti effect
 const NUM_CONFETTI = 50;
@@ -16,15 +19,24 @@ interface ContextViewProps {
     contextData: ContextData | null;
 }
 
+// Main component content
 const ContextView: React.FC<ContextViewProps> = ({ contextData }) => {
     const [translated, setTranslated] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
     const [shuffledChoices, setShuffledChoices] = useState<Choice[]>([]);
+    const [isBlurred, setIsBlurred] = useState(true);
     const { user } = useUser();
+    const scrollViewRef = useRef<ScrollView>(null);
+    
+    // Tooltip state
+    const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
+    const tooltipOpacity = useRef(new Animated.Value(0)).current;
+    const [hasSeenTutorial, setHasSeenTutorial] = useState(false);
     
     // Animation values
     const scaleAnim = useRef(new Animated.Value(0.95)).current;
-    const phraseOpacity = useRef(new Animated.Value(0)).current;
+    const phraseOpacity = useRef(new Animated.Value(1)).current;
+    const contentOpacity = useRef(new Animated.Value(1)).current;
     
     // Confetti animation values
     const confettiAnimations = useRef(
@@ -36,23 +48,102 @@ const ContextView: React.FC<ContextViewProps> = ({ contextData }) => {
         }))
     ).current;
     
+    // Check if the user has seen the tutorial before
+    useEffect(() => {
+        const checkTutorialStatus = async () => {
+            try {
+                const tutorialStatus = await AsyncStorage.getItem(TUTORIAL_STORAGE_KEY);
+                if (tutorialStatus === 'true') {
+                    console.log('User has already seen the context tutorial');
+                    setHasSeenTutorial(true);
+                } else {
+                    console.log('User has not seen the context tutorial yet');
+                    setHasSeenTutorial(false);
+                }
+            } catch (error) {
+                console.error('Error checking tutorial status:', error);
+                // If there's an error, default to not showing the tutorial
+                setHasSeenTutorial(false);
+            }
+        };
+
+        checkTutorialStatus();
+    }, []);
+    
     // Start animations when component mounts
     useEffect(() => {
-        Animated.sequence([
-            Animated.timing(phraseOpacity, {
-                toValue: 1,
-                duration: 600,
-                useNativeDriver: true,
-                easing: Easing.out(Easing.cubic)
-            }),
-            Animated.timing(scaleAnim, {
-                toValue: 1,
-                duration: 500,
-                useNativeDriver: true,
-                easing: Easing.elastic(1.2)
-            })
-        ]).start();
-    }, []);
+        if (!isBlurred) {
+            Animated.sequence([
+                Animated.timing(contentOpacity, {
+                    toValue: 1,
+                    duration: 400,
+                    useNativeDriver: true,
+                    easing: Easing.out(Easing.cubic)
+                }),
+                Animated.timing(scaleAnim, {
+                    toValue: 1,
+                    duration: 500,
+                    useNativeDriver: true,
+                    easing: Easing.elastic(1.2)
+                })
+            ]).start();
+        }
+    }, [isBlurred]);
+
+    // Show tooltip with delay when blur is removed
+    useEffect(() => {
+        let tooltipTimer: NodeJS.Timeout;
+        
+        if (!isBlurred && !hasSeenTutorial) {
+            // Set timer to show the tooltip after 1 second
+            tooltipTimer = setTimeout(() => {
+                setTooltipVisible(true);
+                
+                // Animate tooltip fade in
+                Animated.timing(tooltipOpacity, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true,
+                    easing: Easing.out(Easing.cubic)
+                }).start();
+            }, 1000);
+        } else {
+            // Hide tooltip when screen is blurred or user has seen tutorial
+            setTooltipVisible(false);
+            tooltipOpacity.setValue(0);
+        }
+        
+        // Clean up timer
+        return () => {
+            if (tooltipTimer) clearTimeout(tooltipTimer);
+        };
+    }, [isBlurred, hasSeenTutorial]);
+
+    // Function to handle tooltip dismissal
+    const handleDismissTooltip = async () => {
+        // Add haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        // Animate out the tooltip
+        Animated.timing(tooltipOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true
+        }).start(async () => {
+            setTooltipVisible(false);
+            
+            // Mark tutorial as seen in state
+            setHasSeenTutorial(true);
+            
+            // Save to AsyncStorage
+            try {
+                await AsyncStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+                console.log('Context tutorial marked as seen in AsyncStorage');
+            } catch (error) {
+                console.error('Error saving tutorial status:', error);
+            }
+        });
+    };
 
     // Shuffle choices when contextData changes
     useEffect(() => {
@@ -68,16 +159,28 @@ const ContextView: React.FC<ContextViewProps> = ({ contextData }) => {
         }
     }, [contextData]);
 
+    const handleContinue = () => {
+        setIsBlurred(false);
+        // Haptic feedback when continuing
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    };
+
     // If no data, show loading or placeholder
     if (!contextData) {
         return (
-            <View style={styles.container}>
-                <View style={styles.loadingContainer}>
-                    <Animated.View style={{ opacity: phraseOpacity }}>
-                        <Text style={styles.loadingText}>Loading...</Text>
-                    </Animated.View>
+            <ScrollView
+                ref={scrollViewRef}
+                style={styles.scrollContainer}
+                showsVerticalScrollIndicator={false}
+            >
+                <View style={styles.container}>
+                    <View style={styles.loadingContainer}>
+                        <Animated.View style={{ opacity: phraseOpacity }}>
+                            <Text style={styles.loadingText}>Loading...</Text>
+                        </Animated.View>
+                    </View>
                 </View>
-            </View>
+            </ScrollView>
         );
     }
 
@@ -170,122 +273,174 @@ const ContextView: React.FC<ContextViewProps> = ({ contextData }) => {
     };
 
     return (
-        <View style={styles.container}>
-            <Text style={styles.sectionTitle}>KEY PHRASE QUIZ</Text>
-            
-            <Animated.View 
-                style={[
-                    styles.keyPhraseCard,
-                    { 
-                        transform: [{ scale: scaleAnim }],
-                        opacity: phraseOpacity
-                    }
-                ]}
+        <View style={styles.fullScreenContainer}>
+            <ScrollView
+                ref={scrollViewRef}
+                style={styles.scrollContainer}
+                contentContainerStyle={styles.scrollContentContainer}
+                showsVerticalScrollIndicator={false}
             >
-                <View style={styles.keyPhraseLabelContainer}>
-                    <Ionicons name="key-outline" size={14} color="#FFFF00" style={styles.iconKey} />
-                    <Text style={styles.keyPhraseLabel}>Key Phrase</Text>
-                </View>
-
-                <View style={styles.titleRow}>
-                    <Text style={styles.title}>
-                        {translated ? contextData.keyPhraseTranslation : contextData.keyPhrase}
-                    </Text>
-                    <TouchableOpacity
-                        style={styles.translateButton}
-                        onPress={() => setTranslated(!translated)}
+                <View style={styles.container}>
+                    {/* Always render the content, but with reduced opacity when blurred */}
+                    <Animated.View 
+                        style={{ 
+                            opacity: isBlurred ? 0.3 : contentOpacity,
+                            width: '100%'
+                        }}
                     >
-                        <TranslateIcon 
-                            width={20} 
-                            height={20} 
-                            fill={translated ? "#FFFFFF" : "#888888"} 
-                        />
-                    </TouchableOpacity>
-                </View>
-                
-                {/* Yellow underline for key phrase */}
-                <View style={styles.underlineContainer}>
-                    <View style={styles.yellowUnderline} />
-                </View>
-            </Animated.View>
-
-            <View style={styles.instructionsContainer}>
-                <Ionicons name="help-circle-outline" size={14} color="#999" />
-                <Text style={styles.subtitle}>
-                    Tap the correct situation where you'd use this phrase
-                </Text>
-            </View>
-
-            <View style={styles.choicesContainer}>
-                {shuffledChoices.map((choice: Choice, i: number) => {
-                    const isSelected = selectedIndex === i;
-                    let outlineColor = 'rgba(255,255,255,0.2)';
-                    let bgColor = 'rgba(255,255,255,0.05)';
-                    let iconName = null;
-
-                    if (isSelected) {
-                        if (choice.isCorrect) {
-                            outlineColor = '#5AE15A';
-                            bgColor = 'rgba(90,225,90,0.1)';
-                            iconName = "checkmark-circle";
-                        } else {
-                            outlineColor = '#E15A5A';
-                            bgColor = 'rgba(225,90,90,0.1)';
-                            iconName = "close-circle";
-                        }
-                    }
-
-                    return (
-                        <View key={i} style={styles.choiceWrapper}>
-                            <TouchableOpacity
-                                onPress={() => handleChoice(i)}
+                        <Text style={styles.sectionTitle}>KEY PHRASE QUIZ</Text>
+                        
+                        <View style={{ width: '100%' }}>
+                            <Animated.View 
                                 style={[
-                                    styles.choiceButton,
-                                    { borderColor: outlineColor, backgroundColor: bgColor },
+                                    styles.keyPhraseCard,
+                                    { 
+                                        transform: [{ scale: scaleAnim }],
+                                        opacity: phraseOpacity
+                                    }
                                 ]}
-                                activeOpacity={0.8}
                             >
-                                <Text style={styles.choiceText}>{choice.text}</Text>
-                                {isSelected && (
-                                    <View style={styles.resultIconContainer}>
+                                <View style={styles.keyPhraseLabelContainer}>
+                                    <Ionicons name="key-outline" size={14} color="#FFFF00" style={styles.iconKey} />
+                                    <Text style={styles.keyPhraseLabel}>Key Phrase</Text>
+                                </View>
+
+                                <View style={styles.titleRow}>
+                                    <Text style={styles.title}>
+                                        {translated ? contextData.keyPhraseTranslation : contextData.keyPhrase}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.translateButton}
+                                        onPress={() => setTranslated(!translated)}
+                                    >
                                         <Ionicons 
-                                            name={iconName as any}
+                                            name="language" 
                                             size={20} 
-                                            color={choice.isCorrect ? '#5AE15A' : '#E15A5A'} 
+                                            color={translated ? "#FFFFFF" : "#888888"} 
                                         />
-                                    </View>
-                                )}
-                            </TouchableOpacity>
-                            
-                            {/* Confetti container for correct answers */}
-                            {isSelected && choice.isCorrect && confettiAnimations.map((anim, index) => (
-                                <Animated.View
-                                    key={`confetti-${index}`}
-                                    style={[
-                                        styles.confetti,
-                                        {
-                                            width: index % 3 === 0 ? 10 : 8, // Varied sizes
-                                            height: index % 3 === 0 ? 6 : 8, // Rectangles and squares
-                                            borderRadius: index % 3 === 0 ? 1 : 4, // Different shapes
-                                            transform: [
-                                                { translateX: anim.position.x },
-                                                { translateY: anim.position.y },
-                                                { scale: anim.scale },
-                                                { rotate: anim.rotation.interpolate({
-                                                    inputRange: [-360, 360],
-                                                    outputRange: ['-360deg', '360deg']
-                                                })},
-                                            ],
-                                            opacity: anim.opacity,
-                                            backgroundColor: getConfettiColor(index),
-                                        }
-                                    ]}
-                                />
-                            ))}
+                                    </TouchableOpacity>
+                                </View>
+                                
+                                {/* Yellow underline for key phrase */}
+                                <View style={styles.underlineContainer}>
+                                    <View style={styles.yellowUnderline} />
+                                </View>
+                            </Animated.View>
                         </View>
-                    );
-                })}
-            </View>
+
+                        <View style={styles.instructionsContainer}>
+                            <Ionicons name="help-circle-outline" size={14} color="#999" />
+                            <Text style={styles.subtitle}>
+                                Tap the correct situation where you'd use this phrase
+                            </Text>
+                        </View>
+
+                        <View style={styles.choicesContainer}>
+                            {shuffledChoices.map((choice: Choice, i: number) => {
+                                return (
+                                    <View key={i} style={styles.choiceWrapper}>
+                                        <TouchableOpacity
+                                            onPress={() => handleChoice(i)}
+                                            style={[
+                                                styles.choiceButton,
+                                                { borderColor: getChoiceColor(choice, i, selectedIndex).outlineColor, 
+                                                  backgroundColor: getChoiceColor(choice, i, selectedIndex).bgColor },
+                                            ]}
+                                            activeOpacity={0.8}
+                                            disabled={isBlurred}
+                                        >
+                                            <Text style={styles.choiceText}>{choice.text}</Text>
+                                            {selectedIndex === i && (
+                                                <View style={styles.resultIconContainer}>
+                                                    <Ionicons 
+                                                        name={getChoiceColor(choice, i, selectedIndex).iconName as any}
+                                                        size={20} 
+                                                        color={choice.isCorrect ? '#5AE15A' : '#E15A5A'} 
+                                                    />
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                        
+                                        {/* Confetti container for correct answers */}
+                                        {selectedIndex === i && choice.isCorrect && confettiAnimations.map((anim, index) => (
+                                            <Animated.View
+                                                key={`confetti-${index}`}
+                                                style={[
+                                                    styles.confetti,
+                                                    {
+                                                        width: index % 3 === 0 ? 10 : 8,
+                                                        height: index % 3 === 0 ? 6 : 8,
+                                                        borderRadius: index % 3 === 0 ? 1 : 4,
+                                                        transform: [
+                                                            { translateX: anim.position.x },
+                                                            { translateY: anim.position.y },
+                                                            { scale: anim.scale },
+                                                            { rotate: anim.rotation.interpolate({
+                                                                inputRange: [-360, 360],
+                                                                outputRange: ['-360deg', '360deg']
+                                                            })},
+                                                        ],
+                                                        opacity: anim.opacity,
+                                                        backgroundColor: getConfettiColor(index),
+                                                    }
+                                                ]}
+                                            />
+                                        ))}
+                                    </View>
+                                );
+                            })}
+                        </View>
+                    </Animated.View>
+                </View>
+            </ScrollView>
+            
+            {/* Extract the blur overlay from ScrollView to make it absolute to the screen */}
+            {isBlurred && (
+                <View style={styles.fullScreenOverlay}>
+                    <BlurView
+                        intensity={10}
+                        style={StyleSheet.absoluteFill}
+                        tint="dark"
+                    />
+                    <View style={styles.absoluteCentered}>
+                        <Text style={styles.watchClipText}>Watch the clip</Text>
+                        <Text style={styles.thenText}>then</Text>
+                        <TouchableOpacity
+                            style={styles.continueButton}
+                            onPress={handleContinue}
+                            activeOpacity={0.7}
+                        >
+                            <Text style={styles.continueButtonText}>Continue</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            )}
+            
+            {/* Tooltip */}
+            {tooltipVisible && (
+                <>
+                    {/* Full screen blur */}
+                    <BlurView 
+                        intensity={20} 
+                        tint="dark" 
+                        style={StyleSheet.absoluteFillObject}
+                    />
+                    
+                    {/* Tooltip on top of the blur */}
+                    <Animated.View style={[styles.tooltipContainer, { opacity: tooltipOpacity }]}>
+                        <View style={styles.tooltip}>
+                            <Text style={styles.tooltipTitle}>Step 2: Answer the key phrase quiz</Text>
+                            <TouchableOpacity
+                                style={styles.tooltipButton}
+                                onPress={handleDismissTooltip}
+                                activeOpacity={0.7}
+                            >
+                                <Text style={styles.tooltipButtonText}>Okay!</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </Animated.View>
+                </>
+            )}
         </View>
     );
 };
@@ -296,15 +451,73 @@ const getConfettiColor = (index: number): string => {
     return colors[index % colors.length];
 };
 
+// Helper function to determine choice colors and icons
+const getChoiceColor = (choice: Choice, index: number, selectedIndex: number | null) => {
+    if (selectedIndex !== index) {
+        return {
+            outlineColor: 'rgba(255,255,255,0.2)',
+            bgColor: 'rgba(255,255,255,0.05)',
+            iconName: null
+        };
+    }
+    
+    if (choice.isCorrect) {
+        return {
+            outlineColor: '#5AE15A',
+            bgColor: 'rgba(90,225,90,0.1)',
+            iconName: "checkmark-circle"
+        };
+    } else {
+        return {
+            outlineColor: '#E15A5A',
+            bgColor: 'rgba(225,90,90,0.1)',
+            iconName: "close-circle"
+        };
+    }
+};
+
 export default ContextView;
 
 const styles = StyleSheet.create({
+    fullScreenContainer: {
+        flex: 1,
+        width: '100%',
+        height: '100%',
+        position: 'relative',
+    },
+    scrollContainer: {
+        flex: 1,
+        width: '100%',
+        backgroundColor: 'transparent',
+    },
+    scrollContentContainer: {
+        flexGrow: 1,
+    },
     container: {
         flex: 1,
         width: '100%',
         backgroundColor: 'transparent',
         padding: 12,
         alignItems: 'center',
+    },
+    fullScreenOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    absoluteCentered: {
+        position: 'absolute',
+        top: '50%',
+        left: '50%',
+        transform: [{ translateX: -100 }, { translateY: -60 }],
+        width: 200,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     sectionTitle: {
         fontSize: 18,
@@ -443,5 +656,78 @@ const styles = StyleSheet.create({
         top: '50%',
         left: '50%',
         zIndex: 10, // Ensure confetti appears above other elements
+    },
+    watchClipText: {
+        fontSize: 18,
+        color: '#999999',
+        textAlign: 'center',
+        marginBottom: 8,
+        fontWeight: '500',
+    },
+    thenText: {
+        fontSize: 16,
+        color: '#999999',
+        textAlign: 'center',
+        marginBottom: 12,
+        fontWeight: '400',
+    },
+    continueButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 30,
+        borderRadius: 50,
+        backgroundColor: 'rgba(100, 100, 100, 0.2)',
+        borderWidth: 1,
+        borderColor: 'rgba(150, 150, 150, 0.2)',
+    },
+    continueButtonText: {
+        fontSize: 16,
+        color: '#999999',
+        fontWeight: '500',
+    },
+    // Tooltip styles
+    tooltipContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9999,
+        padding: 20,
+    },
+    tooltip: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        padding: 20,
+        width: '80%',
+        alignItems: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 10,
+    },
+    tooltipTitle: {
+        fontSize: 18,
+        color: '#333333',
+        textAlign: 'center',
+        fontWeight: '600',
+        marginBottom: 16,
+        lineHeight: 24,
+    },
+    tooltipButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 24,
+        backgroundColor: '#5a51e1',
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 5,
+    },
+    tooltipButtonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: '600',
     },
 });

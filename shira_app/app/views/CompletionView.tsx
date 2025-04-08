@@ -6,7 +6,9 @@ import {
   ActivityIndicator, 
   Animated, 
   Easing,
-  Dimensions
+  Dimensions,
+  TouchableOpacity,
+  Modal
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 // @ts-ignore
@@ -16,10 +18,15 @@ import useUser from '../../hooks/useUser';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // XP level constants
 const XP_PER_LEVEL = 500;
 const XP_EARNED = 100;
+
+// Tooltip storage key
+const TUTORIAL_STORAGE_KEY = '@shira_hasSeenCompleteTutorial';
 
 const { width } = Dimensions.get('window');
 
@@ -36,6 +43,12 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [hasUpdated, setHasUpdated] = useState<boolean>(false);
   
+  // Tooltip state
+  const [tooltipVisible, setTooltipVisible] = useState<boolean>(false);
+  const [initialized, setInitialized] = useState<boolean>(false);
+  const [hasSeenTutorial, setHasSeenTutorial] = useState<boolean>(false);
+  const tooltipOpacity = useRef(new Animated.Value(0)).current;
+  
   // Animation values
   const fadeIn = useRef(new Animated.Value(0)).current;
   const slideUp = useRef(new Animated.Value(30)).current;
@@ -51,6 +64,32 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
     scale: new Animated.Value(0),
     opacity: new Animated.Value(0)
   }))).current;
+
+  // Check if the user has seen the tutorial before
+  useEffect(() => {
+    const checkTutorialStatus = async () => {
+      try {
+        const tutorialStatus = await AsyncStorage.getItem(TUTORIAL_STORAGE_KEY);
+        if (tutorialStatus === 'true') {
+          console.log('User has already seen the completion tutorial');
+          setHasSeenTutorial(true);
+        } else {
+          console.log('User has not seen the completion tutorial yet');
+          setHasSeenTutorial(false);
+        }
+      } catch (error) {
+        console.error('Error checking tutorial status:', error);
+        // If there's an error, default to not showing the tutorial
+        setHasSeenTutorial(false);
+      } finally {
+        // Mark as initialized after AsyncStorage check completes
+        setInitialized(true);
+        console.log('Tutorial status check initialized');
+      }
+    };
+
+    checkTutorialStatus();
+  }, []);
 
   // Fetch initial user data
   useEffect(() => {
@@ -131,6 +170,57 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
       resetAnimations();
     }
   }, [isVisible, isLoading, hasUpdated]);
+  
+  // Show tooltip with delay when component is initialized and user hasn't seen tutorial
+  useEffect(() => {
+    let tooltipTimer: NodeJS.Timeout;
+    
+    if (initialized && isVisible && !isLoading && hasUpdated && !hasSeenTutorial) {
+      // Set timer to show the tooltip after 1.5 seconds
+      tooltipTimer = setTimeout(() => {
+        setTooltipVisible(true);
+        
+        // Animate tooltip fade in
+        Animated.timing(tooltipOpacity, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic)
+        }).start();
+      }, 1500);
+    }
+    
+    // Clean up timer
+    return () => {
+      if (tooltipTimer) clearTimeout(tooltipTimer);
+    };
+  }, [initialized, isVisible, isLoading, hasUpdated, hasSeenTutorial]);
+  
+  // Function to handle tooltip dismissal
+  const handleDismissTooltip = async () => {
+    // Add haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Animate out the tooltip
+    Animated.timing(tooltipOpacity, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true
+    }).start(async () => {
+      setTooltipVisible(false);
+      
+      // Mark as seen in state
+      setHasSeenTutorial(true);
+      
+      // Save to AsyncStorage
+      try {
+        await AsyncStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+        console.log('Completion tutorial marked as seen in AsyncStorage');
+      } catch (error) {
+        console.error('Error saving tutorial status:', error);
+      }
+    });
+  };
   
   // Function to start all animations
   const startAnimations = (updatedXP: number, updatedCount: number) => {
@@ -569,6 +659,32 @@ const CompletionView: React.FC<CompletionViewProps> = ({ isVisible }) => {
           </View>
         </LinearGradient>
       </Animated.View>
+      
+      {/* Tooltip overlay */}
+      {tooltipVisible && (
+        <>
+          {/* Full screen blur */}
+          <BlurView 
+            intensity={20} 
+            tint="dark" 
+            style={StyleSheet.absoluteFillObject}
+          />
+          
+          {/* Tooltip on top of the blur */}
+          <Animated.View style={[styles.tooltipContainer, { opacity: tooltipOpacity }]}>
+            <View style={styles.tooltip}>
+              <Text style={styles.tooltipTitle}>Congratulations! You finished your first clip! Swipe up to go to the next one.</Text>
+              <TouchableOpacity
+                style={styles.tooltipButton}
+                onPress={handleDismissTooltip}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.tooltipButtonText}>Let's go</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 };
@@ -744,6 +860,52 @@ const styles = StyleSheet.create({
   },
   stackedChevron: {
     marginTop: -12,
+  },
+  // Tooltip styles
+  tooltipContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+    padding: 20,
+  },
+  tooltip: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  tooltipTitle: {
+    fontSize: 18,
+    color: '#333333',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 16,
+    lineHeight: 24,
+  },
+  tooltipButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 24,
+    backgroundColor: '#5a51e1',
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 5,
+  },
+  tooltipButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

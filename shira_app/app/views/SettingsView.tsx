@@ -15,7 +15,7 @@ interface SettingsViewProps {
     visible: boolean;                // from parent
     onClose: () => void;            // called once close animation finishes
     keyPhraseReplay: 'off' | 'once';
-    onSetKeyPhraseReplay: (mode: 'off' | 'once') => void;
+    onSetKeyPhraseReplay?: (mode: 'off' | 'once') => void;  // Make this optional
 }
 
 const screenHeight = Dimensions.get('window').height;
@@ -104,7 +104,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                                     styles.optionBox,
                                     selected && styles.optionBoxSelected
                                 ]}
-                                onPress={() => onSetKeyPhraseReplay(mode)}
+                                onPress={() => onSetKeyPhraseReplay?.(mode)}
                             >
                                 <Text style={[
                                     styles.optionText,

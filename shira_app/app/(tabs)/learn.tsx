@@ -14,6 +14,11 @@ import {
     Platform,
     LayoutChangeEvent,
     Dimensions,
+    Easing,
+    StatusBar,
+    UIManager,
+    InteractionManager,
+    NativeModules
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -67,12 +72,14 @@ import PreviousVideoIndicator from '../learn-components/PreviousVideoIndicator';
 // Import reducer and types
 import learnReducer, { initialLearnState } from '../learn-components/learnReducer';
 import { VideoPlayerRef } from '../learn-components/types';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Import new components
 import SidebarView from '../views/SidebarView';
 import TabBar from '../views/TabBar';
 import DotIndicator from '../components/DotIndicator';
 import { Video } from 'expo-av';
+import * as Haptics from 'expo-haptics';
 
 // Constants for the collapsible lessons container
 const TAB_BAR_HEIGHT = 60;
@@ -85,7 +92,12 @@ const SLIDER_CONTAINER_HEIGHT = 40;
 const MAX_FREE_VIDEOS = 3;
 
 // Debug flag to control logging verbosity
-const DEBUG_MODE = process.env.NODE_ENV !== 'production';
+const DEBUG_MODE = false;
+
+// Caption timing constant - make captions appear earlier for better sync
+const CAPTION_TIMING_OFFSET = 0.7; // increased from 0.3 to 0.7 seconds for more noticeable earlier display
+const PROCESSING_DELAY = 0.15; // Additional offset for processing/rendering delays
+const END_TIME_EXTENSION = 0.1; // Keep captions visible a little longer than their end time
 
 // Add debounce utility
 const debounce = <F extends (...args: any[]) => any>(
@@ -366,6 +378,9 @@ const calculatePreviousLessonId = async (
     }
 };
 
+// Tutorial storage key
+const TUTORIAL_STORAGE_KEY = '@shira_hasSeenLearnTutorial';
+
 const Learn: React.FC = () => {
     const { width, height } = useWindowDimensions();
     const insets = useSafeAreaInsets();
@@ -381,6 +396,12 @@ const Learn: React.FC = () => {
     const lastSeekTime = useRef<number>(0);
     const seekTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Tutorial state and animation
+    const [tutorialVisible, setTutorialVisible] = useState(false);
+    const [tutorialStep, setTutorialStep] = useState(0);
+    const tutorialOpacity = useRef(new Animated.Value(0)).current;
+    const [hasSeenTutorial, setHasSeenTutorial] = useState(false);
+
     // Main state reducer
     const [state, dispatch] = useReducer(learnReducer, initialLearnState);
 
@@ -394,7 +415,7 @@ const Learn: React.FC = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [showInstructions, setShowInstructions] = useState(false);
     const [showQuestionButton, setShowQuestionButton] = useState(true);
-    const [keyPhraseReplay, setKeyPhraseReplay] = useState<'off' | 'once'>('off');
+    const [keyPhraseReplay] = useState<'off' | 'once'>('once'); // Always set to 'once' - no settings needed
     const [translated, setTranslated] = useState(false);
 
     // Add video state
@@ -464,45 +485,115 @@ const Learn: React.FC = () => {
     //     extrapolate: 'clamp',
     // });
 
+    // Add a ref to track the last reported time
+    const lastReportedTimeRef = useRef<number | null>(null);
+
     // Update captions based on current time
     useEffect(() => {
         if (!state.currentLesson?.data.video.captions || !videoState.isReady) return;
 
         // videoState.currentTime is already relative to clipStart (adjusted in updateVideoState)
-        // so we can use it directly with the caption's localStart and localEnd
         const currentTime = videoState.currentTime;
 
-        // Find the caption that matches the current time
+        // Find the caption that matches the current time - apply offset to make captions appear earlier
+        // Using the global END_TIME_EXTENSION constant defined at the top of the file
         const caption = state.currentLesson.data.video.captions.find(cap => {
-            return currentTime >= cap.localStart && currentTime <= cap.localEnd;
+            return currentTime >= (cap.localStart - CAPTION_TIMING_OFFSET) && 
+                   currentTime <= (cap.localEnd - CAPTION_TIMING_OFFSET + END_TIME_EXTENSION);
         });
+
+        // Look ahead for the next caption for preloading
+        const currentCaptions = state.currentLesson.data.video.captions;
+        if (caption) {
+            const currentIndex = currentCaptions.findIndex(cap => 
+                cap.localStart === caption.localStart && cap.localEnd === caption.localEnd
+            );
+            // Preload next caption if available
+            if (currentIndex >= 0 && currentIndex < currentCaptions.length - 1) {
+                // Next caption is already identified, no need to do anything else here
+                // The system will naturally transition to it when the time is right
+                // We could add more sophisticated preloading if needed
+            }
+        }
 
         // Check if current caption contains highlight phrase
         const highlightPhrase = state.currentLesson.data.video.highlightPhrase;
-        const isHighlightedCaption = caption?.targetLangLine.toLowerCase().includes(highlightPhrase.toLowerCase());
         
-        // Handle phrase repetition - only if keyPhraseReplay is not 'off'
-        if (keyPhraseReplay !== 'off' && isFirstPlay && isHighlightedCaption && !isInHighlightedSection && phraseRepeatCount < 3 && caption) {
+        // Find the exact caption that contains the highlight phrase
+        const highlightCaption = state.currentLesson.data.video.captions.find(cap => 
+            cap.targetLangLine.toLowerCase().includes(highlightPhrase.toLowerCase())
+        );
+        
+        // Apply the same timing offsets to the highlight caption boundaries that we use for regular captions
+        const highlightStartWithOffset = highlightCaption ? 
+            (highlightCaption.localStart - CAPTION_TIMING_OFFSET) : null;
+        const highlightEndWithOffset = highlightCaption ? 
+            (highlightCaption.localEnd - CAPTION_TIMING_OFFSET + END_TIME_EXTENSION) : null;
+        
+        // Check if we're in the highlight caption using the same offset logic used to find current caption
+        const isInHighlightCaption = caption && highlightCaption && 
+            caption.localStart === highlightCaption.localStart && 
+            caption.localEnd === highlightCaption.localEnd;
+        
+        // Check if we're past the end of the highlight caption with offsets factored in
+        const isPastHighlightCaption = highlightEndWithOffset !== null && 
+            currentTime > highlightEndWithOffset;
+        
+        // Handle phrase repetition - always active (no settings dependency)
+        if (isFirstPlay && isInHighlightCaption && !isInHighlightedSection && phraseRepeatCount < 3) {
+            // Set that we've entered the highlighted section
             setIsInHighlightedSection(true);
             setShouldRepeatPhrase(true);
-        } else if (!isHighlightedCaption && isInHighlightedSection) {
+            
+            logEvent('ENTERED_HIGHLIGHT_CAPTION', {
+                currentTime,
+                captionStart: highlightCaption.localStart,
+                captionStartWithOffset: highlightStartWithOffset,
+                captionEnd: highlightCaption.localEnd,
+                captionEndWithOffset: highlightEndWithOffset,
+                highlightPhrase,
+                repeatCount: phraseRepeatCount
+            });
+        } else if (isInHighlightedSection && ((!isInHighlightCaption && caption) || isPastHighlightCaption)) {
+            // We've exited the highlighted section or reached the end of the caption
             setIsInHighlightedSection(false);
             
-            if (keyPhraseReplay !== 'off' && shouldRepeatPhrase && phraseRepeatCount < 2) {
-                // Find the caption that comes right before the highlighted phrase
-                const captions = state.currentLesson.data.video.captions;
-                const highlightCaptionIndex = captions.findIndex(cap => 
-                    cap.targetLangLine.toLowerCase().includes(highlightPhrase.toLowerCase())
-                );
+            if (shouldRepeatPhrase && phraseRepeatCount < 3 && highlightCaption) {
+                // Add a small padding (0.2s) before the caption start to ensure we don't cut off the beginning
+                const CAPTION_START_PADDING = 0.2;
+                // Jump back to slightly before the start of highlight caption to repeat it
+                // Important: use the raw caption timing here as handleSeek will apply the necessary adjustments
+                const jumpToTime = Math.max(0, highlightCaption.localStart - CAPTION_START_PADDING);
                 
-                if (highlightCaptionIndex > 0) {
-                    // Jump to the beginning of the highlighted phrase caption
-                    const jumpToTime = Math.max(0, captions[highlightCaptionIndex].localStart);
-                    handleSeek(jumpToTime);
-                    setPhraseRepeatCount(prev => prev + 1);
-                }
+                logEvent('JUMPING_BACK_TO_HIGHLIGHT', {
+                    currentTime,
+                    jumpToTime,
+                    originalStart: highlightCaption.localStart,
+                    appliedPadding: CAPTION_START_PADDING,
+                    repeatCount: phraseRepeatCount + 1,
+                });
+                
+                handleSeek(jumpToTime);
+                setPhraseRepeatCount(prev => prev + 1);
+                
+                logEvent('PHRASE_REPLAY', {
+                    currentTime,
+                    jumpToTime,
+                    originalStart: highlightCaption.localStart,
+                    appliedPadding: CAPTION_START_PADDING,
+                    repeatCount: phraseRepeatCount + 1,
+                    highlightPhrase,
+                    captionText: highlightCaption.targetLangLine
+                });
+            } else {
+                // We're done repeating
+                setShouldRepeatPhrase(false);
+                
+                logEvent('FINISHED_HIGHLIGHT_REPEATS', {
+                    highlightPhrase,
+                    totalRepeats: phraseRepeatCount
+                });
             }
-            setShouldRepeatPhrase(false);
         }
 
         // Log caption changes for debugging
@@ -512,12 +603,17 @@ const Learn: React.FC = () => {
                 captionStart: caption?.localStart,
                 captionEnd: caption?.localEnd,
                 captionText: caption?.targetLangLine,
+                appliedOffset: CAPTION_TIMING_OFFSET, // Log the offset being used
+                adjustedStart: caption ? (caption.localStart - CAPTION_TIMING_OFFSET) : null,
+                adjustedEnd: caption ? (caption.localEnd - CAPTION_TIMING_OFFSET + END_TIME_EXTENSION) : null,
+                processingDelay: PROCESSING_DELAY,
+                endTimeExtension: END_TIME_EXTENSION,
                 videoId: state.currentLesson.data.video.id
             });
         }
 
         setCurrentCaption(caption || null);
-    }, [videoState.currentTime, state.currentLesson?.data.video.captions, videoState.isReady, isFirstPlay, phraseRepeatCount, isInHighlightedSection, shouldRepeatPhrase, keyPhraseReplay, currentCaption]);
+    }, [videoState.currentTime, state.currentLesson?.data.video.captions, videoState.isReady, isFirstPlay, phraseRepeatCount, isInHighlightedSection, shouldRepeatPhrase, currentCaption]);
 
     // Reset phrase repeat state when video changes
     useEffect(() => {
@@ -536,6 +632,9 @@ const Learn: React.FC = () => {
             // Update the current video ID reference immediately when lesson changes
             // This is critical for preventing video ID mismatches
             currentVideoIdRef.current = videoId;
+            
+            // Reset the lastReportedTimeRef when the video changes
+            lastReportedTimeRef.current = null;
             
             console.log('Lesson changed to:', {
                 id: state.currentLesson.id,
@@ -1245,19 +1344,31 @@ const Learn: React.FC = () => {
 
     // Update video state based on current time
     const updateVideoState = async (currentTime: number) => {
-        console.log("[DIAG][UPDATE_VIDEO_STATE] Called", {
-            currentTime,
-            isTransitioning: state.isTransitioning,
-            timestamp: new Date().toISOString(),
-            videoId: state.currentLesson?.data.video.id
-        });
+        // Skip if time hasn't changed by a meaningful amount (at least 0.1 seconds)
+        if (lastReportedTimeRef.current !== null && 
+            Math.abs(currentTime - lastReportedTimeRef.current) < 0.1) {
+            return; // Skip update for identical or very similar time values
+        }
+        
+        // Update last reported time
+        lastReportedTimeRef.current = currentTime;
+        
+        // Only log in DEBUG_MODE to reduce console spam
+        if (DEBUG_MODE) {
+            console.log("[DIAG][UPDATE_VIDEO_STATE] Called", {
+                currentTime,
+                isTransitioning: state.isTransitioning,
+                timestamp: new Date().toISOString(),
+                videoId: state.currentLesson?.data.video.id
+            });
+        }
         
         if (!state.currentLesson || !playerRef.current || isSeeking) return;
         
-            const clipStart = state.currentLesson.data.video.clipStart;
-            const clipEnd = state.currentLesson.data.video.clipEnd;
-            const videoId = state.currentLesson.data.video.id;
-            
+        const clipStart = state.currentLesson.data.video.clipStart;
+        const clipEnd = state.currentLesson.data.video.clipEnd;
+        const videoId = state.currentLesson.data.video.id;
+        
         // Skip updates if the video ID doesn't match the current one
         if (currentVideoIdRef.current !== videoId) {
             // If we're in a transition, update the reference instead of skipping
@@ -1301,16 +1412,17 @@ const Learn: React.FC = () => {
         const absoluteTime = currentTime;
         
         // Calculate time relative to clip start for UI and captions
-        const relativeTime = Math.max(0, absoluteTime - clipStart);
+        // Use the top-level PROCESSING_DELAY constant
+        const relativeTime = Math.max(0, absoluteTime - clipStart + PROCESSING_DELAY);
         
         // Log the time values for debugging
         logEvent('VIDEO_TIME_DEBUG', {
             absoluteTime,
             relativeTime,
-                clipStart,
-                clipEnd,
+            clipStart,
+            clipEnd,
             videoId: currentVideoIdRef.current
-            });
+        });
             
         // Update the current time in the video state - this updates the scrubber position
         // This makes videoState.currentTime relative to clipStart for consistent use with captions
@@ -2101,6 +2213,11 @@ const Learn: React.FC = () => {
                 
                 // Record the initial seek time to prevent immediate re-seeking
                 lastSeekTime.current = Date.now();
+
+                // Start tutorial if user hasn't seen it yet
+                if (!hasSeenTutorial) {
+                    startTutorialSequence();
+                }
             } catch (error) {
                 console.error("[DIAG][SEEK_CRITICAL_ERROR] Unhandled error during seek process", {
                     error: error instanceof Error ? error.message : String(error),
@@ -2143,6 +2260,164 @@ const Learn: React.FC = () => {
             setIsSeeking(false);
         }
     };
+
+    // Function to start the tutorial sequence
+    const startTutorialSequence = () => {
+        console.log('Starting learn screen tutorial sequence');
+        
+        // Pause the video
+        setVideoState(prev => ({ ...prev, playing: false }));
+        
+        // Show the tutorial step with a delay
+        setTimeout(() => {
+            setTutorialVisible(true);
+            
+            // Animate the tooltip opacity
+            Animated.timing(tutorialOpacity, {
+                toValue: 1,
+                duration: 300,
+                useNativeDriver: true
+            }).start();
+        }, 500);
+    };
+
+    // Function to handle the "Let's go!" button press
+    const handleDismissTutorial = () => {
+        // Add haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        // Animate out the tutorial
+        Animated.timing(tutorialOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true
+        }).start(() => {
+            // Hide the step 0 tutorial
+            setTutorialVisible(false);
+            // Move to step 1
+            setTutorialStep(1);
+            
+            // Show step 1 after a short delay
+            setTimeout(() => {
+                // Set tutorial visible again for step 1
+                setTutorialVisible(true);
+                // Animate in the step 1 tooltip
+                Animated.timing(tutorialOpacity, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true
+                }).start();
+            }, 500);
+        });
+    };
+    
+    // Function to handle the "Next" button press in step 1
+    const handleNextStep = () => {
+        // Add haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        // Animate out the tutorial
+        Animated.timing(tutorialOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true
+        }).start(() => {
+            // Move to step 2
+            setTutorialStep(2);
+            
+            // Show step 2 after a short delay
+            setTimeout(() => {
+                // Set tutorial visible again for step 2
+                setTutorialVisible(true);
+                // Animate in the step 2 tooltip
+                Animated.timing(tutorialOpacity, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true
+                }).start();
+            }, 500);
+        });
+    };
+
+    // Function to handle the "Next" button press in step 2 (final step)
+    const handleFinalStep = () => {
+        // Add haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        // Animate out the tutorial
+        Animated.timing(tutorialOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true
+        }).start(() => {
+            // Move to step 3
+            setTutorialStep(3);
+            
+            // Show step 3 after a short delay
+            setTimeout(() => {
+                // Set tutorial visible again for step 3
+                setTutorialVisible(true);
+                // Animate in the step 3 tooltip
+                Animated.timing(tutorialOpacity, {
+                    toValue: 1,
+                    duration: 300,
+                    useNativeDriver: true
+                }).start();
+            }, 500);
+        });
+    };
+
+    // Function to handle the "Got it!" button press in step 3 (final step)
+    const handleEndTutorial = () => {
+        // Add haptic feedback
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        
+        // Animate out the tutorial
+        Animated.timing(tutorialOpacity, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: true
+        }).start(async () => {
+            // Hide the tutorial
+            setTutorialVisible(false);
+            
+            // Mark as seen in state
+            setHasSeenTutorial(true);
+            
+            // Mark as seen in AsyncStorage
+            try {
+                await AsyncStorage.setItem(TUTORIAL_STORAGE_KEY, 'true');
+                console.log('Tutorial marked as seen in AsyncStorage');
+            } catch (error) {
+                console.error('Error saving tutorial status:', error);
+            }
+            
+            // Resume video playback
+            setVideoState(prev => ({ ...prev, playing: true }));
+        });
+    };
+
+    // Add an effect to check if the user has seen the tutorial before
+    useEffect(() => {
+        const checkTutorialStatus = async () => {
+            try {
+                const tutorialStatus = await AsyncStorage.getItem(TUTORIAL_STORAGE_KEY);
+                if (tutorialStatus === 'true') {
+                    console.log('User has already seen the learn tutorial');
+                    setHasSeenTutorial(true);
+                } else {
+                    console.log('User has not seen the learn tutorial yet');
+                    setHasSeenTutorial(false);
+                }
+            } catch (error) {
+                console.error('Error checking tutorial status:', error);
+                // If there's an error, default to not showing the tutorial
+                setHasSeenTutorial(false);
+            }
+        };
+
+        checkTutorialStatus();
+    }, []);
 
     return (
         <View style={styles.container}>
@@ -2280,10 +2555,10 @@ const Learn: React.FC = () => {
                                         onPress={() => setTranslated(!translated)}
                                         activeOpacity={0.7}
                                     >
-                                        <TranslateIcon 
-                                            width={22} 
-                                            height={22} 
-                                            fill={translated ? "#ffffff" : "#888888"} // Gray when off, white when on
+                                        <MaterialCommunityIcons 
+                                            name="translate" 
+                                            size={22} 
+                                            color={translated ? "#ffffff" : "#888888"} // Gray when off, white when on
                                         />
                                     </TouchableOpacity>
 
@@ -2659,7 +2934,7 @@ const Learn: React.FC = () => {
                 visible={showSettings}
                 onClose={() => setShowSettings(false)}
                 keyPhraseReplay={keyPhraseReplay}
-                onSetKeyPhraseReplay={setKeyPhraseReplay}
+                onSetKeyPhraseReplay={() => {/* No-op since key phrase replay is always 'once' */}}
             />
 
             <InstructionsView 
@@ -2687,6 +2962,187 @@ const Learn: React.FC = () => {
 
             {/* Toast */}
             <Toast position='top' topOffset={insets.top + 80} />
+
+            {/* Tutorial overlay */}
+            {tutorialVisible && (
+                <>
+                    {/* Full screen blur - only for step 0 */}
+                    {tutorialStep === 0 && (
+                        <BlurView 
+                            intensity={20} 
+                            tint="dark" 
+                            style={StyleSheet.absoluteFillObject}
+                        />
+                    )}
+                    
+                    {/* Step 0: Initial welcome tooltip */}
+                    {tutorialStep === 0 && (
+                        <Animated.View 
+                            style={[
+                                styles.tutorialTooltipContainer,
+                                { 
+                                    opacity: tutorialOpacity,
+                                    width: '70%', // Reduced from previous implicit width
+                                    left: '15%', // Center horizontally (100% - 70%)/2 = 15%
+                                    right: '15%',
+                                    alignSelf: 'center',
+                                }
+                            ]}
+                            pointerEvents="auto"
+                        >
+                            <View style={styles.tutorialTooltip}>
+                                <Text style={styles.tutorialTooltipTitle}>
+                                    Welcome to Shira! Let's take a quick tour before you start your language learning journey.
+                                </Text>
+                                <TouchableOpacity
+                                    style={styles.tutorialTooltipButton}
+                                    onPress={handleDismissTutorial}
+                                    activeOpacity={0.7}
+                                >
+                                    <Text style={styles.tutorialTooltipButtonText}>Let's go!</Text>
+                                </TouchableOpacity>
+                            </View>
+                        </Animated.View>
+                    )}
+                    
+                    {/* Step 1: Below video tooltip */}
+                    {tutorialStep === 1 && (
+                        <Animated.View 
+                            style={[
+                                styles.tutorialTooltipContainer,
+                                { 
+                                    opacity: tutorialOpacity,
+                                    position: 'absolute',
+                                    // Position tooltip below the video player
+                                    top: fixedContainerTop + videoHeight + 10, 
+                                    left: width * 0.15,
+                                    zIndex: 9999,
+                                    width: width * 0.7,
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-start',
+                                }
+                            ]}
+                            pointerEvents="auto"
+                        >
+                            {/* Completely restructured tooltip with arrow */}
+                            <View style={styles.tooltipWrapper}>
+                                <View style={styles.tooltipArrow} />
+                                <View style={styles.tutorialTooltip}>
+                                    <Text style={styles.tutorialTooltipTitle}>
+                                        Step 1: Watch the clip and lookout for the{' '}
+                                        <Text style={styles.keyPhraseHighlight}>
+                                            key phrase
+                                        </Text>
+                                        <Ionicons 
+                                            name="key-outline" 
+                                            size={16} 
+                                            color="#333333" 
+                                            style={{marginLeft: 4, marginBottom: -2}} 
+                                        />
+                                        {'. Tap the video to play/pause it.'}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.tutorialTooltipButton}
+                                        onPress={handleNextStep}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={styles.tutorialTooltipButtonText}>Next</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </Animated.View>
+                    )}
+                    
+                    {/* Step 2: Translate button tooltip */}
+                    {tutorialStep === 2 && (
+                        <Animated.View 
+                            style={[
+                                styles.tutorialTooltipContainer,
+                                { 
+                                    opacity: tutorialOpacity,
+                                    position: 'absolute',
+                                    // Raise the tooltip a bit higher (from +10 to -5)
+                                    top: fixedContainerTop + videoHeight - 5, 
+                                    // Move further left (from 10 to 5)
+                                    left: 5,
+                                    zIndex: 9999,
+                                    width: width * 0.7,
+                                    alignItems: 'flex-start', // Align to the left
+                                    justifyContent: 'flex-start',
+                                }
+                            ]}
+                            pointerEvents="auto"
+                        >
+                            {/* Tooltip with arrow on top-left */}
+                            <View style={styles.tooltipWrapper}>
+                                <View style={styles.tooltipArrowLeftAlign} />
+                                <View style={styles.tutorialTooltip}>
+                                    <Text style={styles.tutorialTooltipTitle}>
+                                        Press the{' '}
+                                        <MaterialCommunityIcons 
+                                            name="translate" 
+                                            size={18} 
+                                            color="#333333" 
+                                            style={{marginBottom: -3}}
+                                        />{' '}
+                                        icon to swap between Spanish and English captions
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.tutorialTooltipButton}
+                                        onPress={handleFinalStep}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={styles.tutorialTooltipButtonText}>Next</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </Animated.View>
+                    )}
+                    
+                    {/* Step 3: Seek buttons tooltip */}
+                    {tutorialStep === 3 && (
+                        <Animated.View 
+                            style={[
+                                styles.tutorialTooltipContainer,
+                                { 
+                                    opacity: tutorialOpacity,
+                                    position: 'absolute',
+                                    // Position tooltip below the seek buttons
+                                    top: fixedContainerTop + videoHeight + 60, 
+                                    left: width * 0.1, // Center horizontally
+                                    zIndex: 9999,
+                                    width: width * 0.8,
+                                    alignItems: 'center',
+                                    justifyContent: 'flex-start',
+                                }
+                            ]}
+                            pointerEvents="auto"
+                        >
+                            {/* Tooltip with two arrows at the top */}
+                            <View style={styles.tooltipWrapper}>
+                                {/* Left arrow */}
+                                <View style={styles.tooltipArrowTopLeft} />
+                                
+                                {/* Right arrow */}
+                                <View style={styles.tooltipArrowTopRight} />
+                                
+                                <View style={styles.tutorialTooltip}>
+                                    <Text style={styles.tutorialTooltipTitle}>
+                                        Use the seek buttons to jump back and forward through the clip
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={styles.tutorialTooltipButton}
+                                        onPress={handleEndTutorial}
+                                        activeOpacity={0.7}
+                                    >
+                                        <Text style={styles.tutorialTooltipButtonText}>Got it!</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </Animated.View>
+                    )}
+                </>
+            )}
         </View>
     );
 };
@@ -3268,7 +3724,122 @@ const styles = StyleSheet.create({
         zIndex: 5, // Add zIndex to ensure it appears above other content
         pointerEvents: 'none', // Allow touches to pass through to content underneath
     },
+    tutorialTooltipContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 9999,
+        pointerEvents: 'auto',
+        padding: 20,
+    },
+    tutorialTooltip: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 12,
+        paddingVertical: 20,
+        paddingHorizontal: 20,
+        width: '100%',
+        alignItems: 'center',
+        // Removing ALL shadow, position, z-index and margin properties
+    },
+    tutorialTooltipTitle: {
+        fontSize: 18,
+        color: '#333333',
+        textAlign: 'center',
+        fontWeight: '600',
+        marginBottom: 16,
+        lineHeight: 24,
+    },
+    tutorialTooltipButton: {
+        paddingVertical: 10,
+        paddingHorizontal: 24,
+        backgroundColor: '#5a51e1',
+        borderRadius: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 5,
+    },
+    tutorialTooltipButtonText: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    keyPhraseHighlight: {
+        textDecorationLine: 'underline',
+        textDecorationColor: '#FFD700', // Yellow underline
+        textDecorationStyle: 'solid',
+        fontWeight: '700',
+    },
+    tooltipWrapper: {
+        alignItems: 'center',
+        width: '100%',
+        position: 'relative',
+    },
+    tooltipArrow: {
+        width: 0,
+        height: 0,
+        borderLeftWidth: 10,
+        borderRightWidth: 10,
+        borderBottomWidth: 10,
+        borderStyle: 'solid',
+        backgroundColor: 'transparent',
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#FFFFFF',
+        marginBottom: -1, // Ensure it connects with the tooltip
+    },
+    tooltipArrowLeftAlign: {
+        width: 0,
+        height: 0,
+        borderLeftWidth: 10,
+        borderRightWidth: 10,
+        borderBottomWidth: 10,
+        borderStyle: 'solid',
+        backgroundColor: 'transparent',
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#FFFFFF',
+        marginBottom: -1, // Ensure it connects with the tooltip
+        alignSelf: 'flex-start', // Align to the left
+        marginLeft: 20, // Position more to the left
+    },
+    tooltipArrowTopLeft: {
+        width: 0,
+        height: 0,
+        borderLeftWidth: 10,
+        borderRightWidth: 10,
+        borderBottomWidth: 10,
+        borderStyle: 'solid',
+        backgroundColor: 'transparent',
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#FFFFFF',
+        marginBottom: -1, // Ensure it connects with the tooltip
+        position: 'absolute',
+        top: -10,
+        left: '25%', // Position at about 25% from the left
+        marginLeft: -10,
+    },
+    tooltipArrowTopRight: {
+        width: 0,
+        height: 0,
+        borderLeftWidth: 10,
+        borderRightWidth: 10,
+        borderBottomWidth: 10,
+        borderStyle: 'solid',
+        backgroundColor: 'transparent',
+        borderLeftColor: 'transparent',
+        borderRightColor: 'transparent',
+        borderBottomColor: '#FFFFFF',
+        marginBottom: -1, // Ensure it connects with the tooltip
+        position: 'absolute',
+        top: -10,
+        right: '25%', // Position at about 25% from the right
+        marginRight: -10,
+    },
 });
 
 export default Learn;
-
